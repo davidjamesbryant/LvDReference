@@ -1,0 +1,13 @@
+*.o
+
+build/
+LvDLikelihoods
+RunSimulation
+TidyTree
+TreeHeights
+
+# Xcode projects and user settings
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
