@@ -61,15 +61,13 @@ Scalar  computeLikelihood(phylo<DecomNodeData>& decomTree, const SubstModel& mod
                 p->exponent = 0;
             } else if (p.leaf() && !p->isClade) {
                 //cout<<"Internal edge "<<endl;
-                for (int i=0;i<model.num_states();i++)
-                    for (int j=0;j<model.num_states();j++)
-                        p->partialMat(i,j) = model.Pij(i,j,p->length);
+                p->partialMat = model.transitionMatrix(p->length);
                 p->exponent = 0;
             } else {
-                
+
                 auto l = p.left();
                 auto r = l.right();
-                
+
                 switch(p->mergeType){
                     case 1:
                         p->partialVec = l->partialVec.array() * r -> partialVec.array(); // .* multiplication on Eigen
@@ -153,11 +151,7 @@ static void initialisePartials(phylo<DecomNodeData>& decomTree, int ntaxa, vecto
             if (p->isClade) {
                 taxaPointers[p->id] = p;
             } else {
-//TODO add a class to model to return transition matrix.
-                
-                for(int i=0;i<4;i++)
-                    for(int j=0;j<4;j++)
-                        p->partialMat(i,j) = model.Pij(i,j,p->length);
+                p->partialMat = model.transitionMatrix(p->length);
             }
         }
     }
@@ -398,15 +392,13 @@ Scalar computeLikelihood(phylo<DecomNodeData>& decomTree, const SubstModel& mode
                 p->exponent = 0;
             } else if (p.leaf() && !p->isClade) {
                 //cout<<"Internal edge "<<endl;
-                for (int i=0;i<model.num_states();i++)
-                    for (int j=0;j<model.num_states();j++)
-                        p->partialMat(i,j) = model.Pij(i,j,p->length);
+                p->partialMat = model.transitionMatrix(p->length);
                 p->exponent = 0;
             } else {
-                
+
                 auto l = p.left();
                 auto r = l.right();
-          
+
                 switch(p->mergeType){
                     case 1:
                         p->partialVec = l->partialVec.array() * r -> partialVec.array();

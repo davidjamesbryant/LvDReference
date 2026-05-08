@@ -178,6 +178,121 @@ static Scalar updatePartials(phylo<nodeData>& tree, vector<phylo<nodeData>::iter
 
 
 
+Scalar computeLikelihood(phylo<NodeDataAllSites>& tree, const SubstModel& model,
+                         const vector<pair<Pattern, int>>& patterns, Stopwatch& timer) {
+    timer.stop();
+
+    const int nPatterns = static_cast<int>(patterns.size());
+    const int nstates   = model.num_states();
+
+    // Allocate partial-likelihood storage at every node (outside timed region)
+    for (auto p = tree.leftmost_leaf(); !p.null(); p = p.next_post())
+        p->resize(nPatterns);
+
+    timer.start();
+
+    using ITERATOR = phylo<NodeDataAllSites>::iterator;
+    for (ITERATOR p = tree.leftmost_leaf(); !p.null(); p = p.next_post()) {
+        if (p.leaf()) {
+            // Fill column s from the observed base for this taxon in pattern s.
+            // resolve_base handles unambiguous, gap (bX), and IUPAC ambiguity codes.
+            vector<Scalar> col(nstates);
+            for (int s = 0; s < nPatterns; s++) {
+                resolve_base(patterns[s].first[p->id], col);
+                for (int i = 0; i < nstates; i++)
+                    p->partials(i, s) = col[i];
+            }
+            p->exponents.setZero();
+        } else {
+            ITERATOR c1 = p.left();
+            ITERATOR c2 = c1.right();
+
+            Eigen::Matrix<Scalar, 4, 4> P1 = model.transitionMatrix(c1->length);
+            Eigen::Matrix<Scalar, 4, 4> P2 = model.transitionMatrix(c2->length);
+
+            // Felsenstein pruning across all patterns simultaneously:
+            //   partials(:,s) = (P1 * c1.partials(:,s)) .* (P2 * c2.partials(:,s))
+            p->partials = (P1 * c1->partials).cwiseProduct(P2 * c2->partials);
+
+            // Per-column underflow correction (mirrors the scalar loop in computeLikelihood(nodeData))
+            p->exponents = c1->exponents + c2->exponents;
+            for (int s = 0; s < nPatterns; s++) {
+                Scalar maxval = p->partials.col(s).maxCoeff();
+                while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
+                    p->partials.col(s) *= UNDERFLOW_MULTIPLIER;
+                    maxval              *= UNDERFLOW_MULTIPLIER;
+                    p->exponents(s)    -= static_cast<int>(UNDERFLOW_STEP);
+                }
+            }
+        }
+    }
+
+    // pi^T * root.partials  gives a 1 x nPatterns row vector of site likelihoods
+    Eigen::Matrix<Scalar, 4, 1> pi_vec;
+    for (int i = 0; i < nstates; i++)
+        pi_vec(i) = model.pi(i);
+
+    Eigen::Matrix<Scalar, 1, Eigen::Dynamic> Ls =
+        pi_vec.transpose() * tree.root()->partials;
+
+    Scalar logL = 0.0;
+    for (int s = 0; s < nPatterns; s++)
+        logL += (log(Ls(s)) + tree.root()->exponents(s)) * patterns[s].second;
+
+    timer.stop();
+    return logL;
+}
+
+
+Scalar updateBranchLength(phylo<NodeDataAllSites>& tree, const SubstModel& model,
+                          const vector<pair<Pattern, int>>& patterns,
+                          phylo<NodeDataAllSites>::iterator p, Scalar newLength) {
+    const int nPatterns = static_cast<int>(patterns.size());
+    const int nstates   = model.num_states();
+
+    p->length = newLength;
+
+    // Recompute partials at every ancestor. A node's partials depend on its
+    // children's lengths (used to build transition matrices), so the first node
+    // affected by the changed length is p's parent.
+    auto q = p.par();
+    while (q != tree.header()) {
+        auto c1 = q.left();
+        auto c2 = c1.right();
+
+        Eigen::Matrix<Scalar, 4, 4> P1 = model.transitionMatrix(c1->length);
+        Eigen::Matrix<Scalar, 4, 4> P2 = model.transitionMatrix(c2->length);
+        q->partials = (P1 * c1->partials).cwiseProduct(P2 * c2->partials);
+
+        q->exponents = c1->exponents + c2->exponents;
+        for (int s = 0; s < nPatterns; s++) {
+            Scalar maxval = q->partials.col(s).maxCoeff();
+            while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
+                q->partials.col(s) *= UNDERFLOW_MULTIPLIER;
+                maxval              *= UNDERFLOW_MULTIPLIER;
+                q->exponents(s)    -= static_cast<int>(UNDERFLOW_STEP);
+            }
+        }
+
+        q = q.par();
+    }
+
+    // Compute log-likelihood from the updated root partials
+    Eigen::Matrix<Scalar, 4, 1> pi_vec;
+    for (int i = 0; i < nstates; i++)
+        pi_vec(i) = model.pi(i);
+
+    Eigen::Matrix<Scalar, 1, Eigen::Dynamic> Ls =
+        pi_vec.transpose() * tree.root()->partials;
+
+    Scalar logL = 0.0;
+    for (int s = 0; s < nPatterns; s++)
+        logL += (log(Ls(s)) + tree.root()->exponents(s)) * patterns[s].second;
+
+    return logL;
+}
+
+
 Scalar  computeLikelihoodUsingUpdating(phylo<nodeData>& tree, const SubstModel& model, const vector<sequence>& seqs, vector<Scalar>& siteL, PatternSorter patternSorter, Stopwatch& timer) {
  
     timer.stop();

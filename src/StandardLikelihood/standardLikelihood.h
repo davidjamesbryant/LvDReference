@@ -9,6 +9,7 @@
 #define STANDARDLIKE_H
 
 #include "phylib.h"
+#include <Eigen>
 
 
 using namespace Phylib;
@@ -50,6 +51,7 @@ public:
 };
 
 
+
 /*
 Generic Substitution Model
 */
@@ -59,6 +61,14 @@ public:
 	virtual Scalar pi(base i) const = 0;
 	virtual Scalar Pij(base i, base j, Scalar t) const = 0;
 	virtual int num_states() const = 0;
+
+    virtual Eigen::Matrix<Scalar, 4, 4> transitionMatrix(Scalar t) const {
+        Eigen::Matrix<Scalar, 4, 4> P;
+        for (int i = 0; i < num_states(); i++)
+            for (int j = 0; j < num_states(); j++)
+                P(i, j) = Pij(i, j, t);
+        return P;
+    }
 };
 
 
@@ -75,6 +85,16 @@ public:
 			return 0.25 - 0.25 * exp((-4.0/3)*t);
 	}
 	int num_states() const override {return 4;};
+
+    Eigen::Matrix<Scalar, 4, 4> transitionMatrix(Scalar t) const override {
+        Scalar e  = exp(-(4.0/3) * t);
+        Scalar d  = 0.25 + 0.75 * e;   // diagonal
+        Scalar od = 0.25 - 0.25 * e;   // off-diagonal
+        Eigen::Matrix<Scalar, 4, 4> P;
+        P.fill(od);
+        P.diagonal().fill(d);
+        return P;
+    }
 };
 
 /*
@@ -154,13 +174,46 @@ private:
 
 /**
  Compute the tree likelihoods.
- 
+
  It assumes that the ID of the leaf nodes in the tree corresponds to the
  corresponding row in seqs. This version has no compression.
  **/
 
 Scalar  computeLikelihood(phylo<nodeData>& tree, const SubstModel& model, const vector<sequence>& seqs, vector<Scalar>& siteL, Stopwatch& timer);
 Scalar  computeLikelihoodUsingUpdating(phylo<nodeData>& tree, const SubstModel& model, const vector<sequence>& seqs, vector<Scalar>& siteL, PatternSorter patternSorter, Stopwatch& timer);
+
+
+/**
+ Like nodeData but stores partial likelihoods for all patterns at once.
+ partials is a 4 x nPatterns matrix: column s holds the four state conditionals for pattern s.
+ exponents is a per-column underflow correction vector matching nodeData's int exponent scheme.
+ */
+class NodeDataAllSites : public basic_newick {
+public:
+    NodeDataAllSites() : basic_newick(), nPatterns(0), isDirty(false) {}
+    NodeDataAllSites(const basic_newick& node)
+        : basic_newick(node), nPatterns(0), isDirty(false) {}
+
+    void resize(int n) {
+        nPatterns = n;
+        partials.resize(4, n);
+        partials.setZero();
+        exponents.resize(n);
+        exponents.setZero();
+    }
+
+    int nPatterns;
+    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partials;
+    Eigen::VectorXi exponents;
+    bool isDirty;
+};
+
+Scalar computeLikelihood(phylo<NodeDataAllSites>& tree, const SubstModel& model,
+                         const vector<pair<Pattern, int>>& patterns, Stopwatch& timer);
+
+Scalar updateBranchLength(phylo<NodeDataAllSites>& tree, const SubstModel& model,
+                          const vector<pair<Pattern, int>>& patterns,
+                          phylo<NodeDataAllSites>::iterator p, Scalar newLength);
 
 
 
