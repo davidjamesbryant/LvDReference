@@ -30,6 +30,10 @@ Scalar computeLikelihood(phylo<DecomNodeData>& decomTree, const SubstModel& mode
 
 Scalar computeLikelihood(phylo<DecomNodeData>& decomTree, const SubstModel& model, const vector<pair<Pattern, int>>& patterns, const PatternDiffs& differences, vector<double>& patternL, Stopwatch& timer);
 
+Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstModel& model,
+                         const vector<pair<Pattern, int>>& patterns,
+                         vector<double>& patternL, Stopwatch& timer);
+
 
 
 

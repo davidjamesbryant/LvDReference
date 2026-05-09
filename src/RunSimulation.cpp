@@ -12,6 +12,7 @@
 #include "Phylib/phylib.h"
 #include "standardLikelihood.h"
 #include "DecompositionTree/decompositionTree.h"
+#include "DecompositionTree/decompositionLikelihood.h"
 
 using namespace Phylib;
 

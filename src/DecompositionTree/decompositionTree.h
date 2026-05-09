@@ -43,6 +43,51 @@ public:
     }
 };
 
+/**
+ Like DecomNodeData but stores partial likelihoods for all sites/patterns at once.
+
+ partialVec is 4 x nSites: column s holds the four state partial likelihoods for site s.
+   Only allocated when isClade == true.
+
+ partialMat is 4 x (4*nSites): the s-th 4x4 matrix occupies middleCols(4*s, 4).
+   Only allocated when isClade == false.
+
+ exponents is a per-site underflow correction vector (one entry per site).
+ */
+class DecomNodeDataAllSites : public basic_newick {
+public:
+    bool external;
+    bool isClade;
+    bool isDirty;
+
+    int nSites;
+    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialVec;  // 4 x nSites        (clades only)
+    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialMat;  // 4 x (4*nSites)    (segments only)
+    Eigen::VectorXi exponents;                             // one per site
+
+    int mergeType;
+
+    // Default constructor: does not allocate partial likelihood storage.
+    DecomNodeDataAllSites() : basic_newick(), external(false), isClade(false),
+                              isDirty(false), nSites(0), mergeType(0) {}
+
+    // Allocating constructor: allocates partialVec (clade nodes) or partialMat (segment nodes).
+    DecomNodeDataAllSites(bool isClade_, int nSites_)
+        : basic_newick(), external(false), isClade(isClade_),
+          isDirty(false), nSites(nSites_), mergeType(0) {
+        if (isClade) {
+            partialVec.resize(4, nSites);
+            partialVec.setZero();
+        } else {
+            partialMat.resize(4, 4 * nSites);
+            partialMat.setZero();
+        }
+        exponents.resize(nSites);
+        exponents.setZero();
+    }
+};
+
+
 void constructPruningDecomp( phylo<basic_newick>& input, phylo<DecomNodeData>& dtree);
 void constructDecompTree( phylo<basic_newick>& input, phylo<DecomNodeData>& decomTree, bool useGreedy);
 
@@ -50,16 +95,6 @@ void constructDecompTree( phylo<basic_newick>& input, phylo<DecomNodeData>& deco
 
 
 
-
-
-
-Scalar  computeLikelihood(phylo<DecomNodeData>& decomTree, const SubstModel& model, const vector<sequence>& seqs, vector<Scalar>& siteL, Stopwatch& timer);
-Scalar computeLikelihoodUsingUpdating(phylo<DecomNodeData>& decomTree, const SubstModel& model, const vector<sequence>& seqs, PatternSorter patternSorter, Stopwatch& timer);
-
-
-Scalar computeLikelihood(phylo<DecomNodeData>& decomTree, const SubstModel& model, const vector<pair<Pattern, int>>& patterns, vector<double>& patternL, Stopwatch& timer);
-
-Scalar computeLikelihood(phylo<DecomNodeData>& decomTree, const SubstModel& model, const vector<pair<Pattern, int>>& patterns, const PatternDiffs& differences, vector<double>& patternL, Stopwatch& timer);
 
 
 
