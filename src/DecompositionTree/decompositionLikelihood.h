@@ -34,6 +34,11 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
                          const vector<pair<Pattern, int>>& patterns,
                          vector<double>& patternL, Stopwatch& timer);
 
+Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstModel& model,
+                          const vector<pair<Pattern, int>>& patterns,
+                          vector<double>& patternL,
+                          phylo<DecomNodeDataAllSites>::iterator p, Scalar newLength);
+
 
 
 
