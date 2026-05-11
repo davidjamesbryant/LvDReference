@@ -7,6 +7,7 @@
 
 
 #include"phylip_seq.h"
+#include <unordered_map>
 
 namespace Phylib {
 
@@ -354,6 +355,42 @@ struct ZigzagComparator {
     }
 };
 
+struct PatternHash {
+    size_t operator()(const Pattern& p) const {
+        size_t h = 0;
+        for (base b : p)
+            h = h * 31 + b;
+        return h;
+    }
+};
+
+
+    /**
+ Take a vector of sequences and returns a vector of patterns with frequencies.
+ By default, patterns are sorted lexicographically.
+ **/
+
+    PatternVector sortPatterns(const vector<sequence>& sequences) {
+        size_t numSeqs = sequences.size();
+        size_t sequenceLength = sequences[0].size();
+
+        unordered_map<Pattern, int, PatternHash> counts;
+        counts.reserve(sequenceLength);
+
+        Pattern pattern(numSeqs);
+        for (size_t col = 0; col < sequenceLength; ++col) {
+            for (size_t row = 0; row < numSeqs; ++row)
+                pattern[row] = sequences[row][col];
+            counts[pattern]++;
+        }
+
+        PatternVector result(counts.begin(), counts.end());
+        sort(result.begin(), result.end(),
+             [](const auto& a, const auto& b) { return a.first < b.first; });
+        return result;
+    }
+
+
 
 /**
  Take a vector of sequences and returns a vector of patterns with frequencies.
@@ -361,29 +398,28 @@ struct ZigzagComparator {
  they are sorted lexicogrqaphically but the ordering of even taxa is reversed.
  **/
 
-static PatternVector sortPatterns(const vector<sequence>& sequences,bool zigzag=false) {
+static PatternVector sortPatterns(const vector<sequence>& sequences, bool zigzag=false) {
+    size_t numSeqs = sequences.size();
     size_t sequenceLength = sequences[0].size();
-    
-    //Copy the patterns onto a map with comparator depending on whether we zigzag
-    // the rows or not.
-    
-    map<Pattern, int,ZigzagComparator> patternCountsZig;
-    map<Pattern, int,LexicographicalComparator> patternCountsLex;
-    
+
+    unordered_map<Pattern, int, PatternHash> counts;
+    counts.reserve(sequenceLength);
+
+    Pattern pattern(numSeqs);
     for (size_t col = 0; col < sequenceLength; ++col) {
-        Pattern pattern;
-        for (const auto& seq : sequences) {
-            pattern.push_back(seq[col]);
-        }
-        if (zigzag)
-            patternCountsZig[pattern]++;  // Increment frequency count
-        else
-            patternCountsLex[pattern]++;
+        for (size_t row = 0; row < numSeqs; ++row)
+            pattern[row] = sequences[row][col];
+        counts[pattern]++;
     }
+
+    PatternVector result(counts.begin(), counts.end());
     if (zigzag)
-        return {patternCountsZig.begin(), patternCountsZig.end()};
+        sort(result.begin(), result.end(),
+             [](const auto& a, const auto& b) { return ZigzagComparator{}(a.first, b.first); });
     else
-        return {patternCountsLex.begin(), patternCountsLex.end()};
+        sort(result.begin(), result.end(),
+             [](const auto& a, const auto& b) { return a.first < b.first; });
+    return result;
 }
 
 

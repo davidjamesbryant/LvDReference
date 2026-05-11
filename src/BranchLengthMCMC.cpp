@@ -159,6 +159,11 @@ static string get_stem(const string& path) {
 struct MCMCResults {
     vector<double> logPosterior;  // log-posterior at each accepted/proposed state
     vector<double> iterTime;      // wall-clock seconds consumed by each iteration
+    // DEBUG fields — comment out before production
+    vector<int>    branch;        // index of branch proposed at each iteration
+    vector<double> old_length;    // branch length before proposal
+    vector<double> new_length;    // branch length after proposal
+    vector<bool>   accepted;      // whether the proposal was accepted
 };
 
 
@@ -175,10 +180,83 @@ static MCMCResults runStandardMCMC(
         const vector<pair<Pattern,int>>& patterns,
         const MCMCOptions&               options)
 {
+    // Fixed seed — all MCMC variants seed identically so proposals are directly comparable
+    seed_random(42);
+
+    // Build a NodeDataAllSites tree from the newick topology
+    phylo<NodeDataAllSites> t;
+    copy(tree, t);
+
+    // Compute initial log-likelihood (also allocates and fills all partial arrays)
+    Stopwatch sw;
+    Scalar logLik = computeLikelihood(t, model, patterns, sw);
+
+    // Initial log-prior: sum_branches [ log(rate) - rate * length ]
+    Scalar logPrior = 0.0;
+    for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
+        if (!p.root())
+            logPrior += log(options.prior_rate) - options.prior_rate * p->length;
+    Scalar logPost = logLik + logPrior;
+
+    // Collect one iterator per branch (every non-root node)
+    vector<phylo<NodeDataAllSites>::iterator> branches;
+    for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
+        if (!p.root())
+            branches.push_back(p);
+    int numBranches = (int)branches.size();
+
     MCMCResults results;
     results.logPosterior.reserve(options.num_iterations);
     results.iterTime.reserve(options.num_iterations);
-    // TODO: implement using NodeDataAllSites / updateBranchLength
+    results.branch.reserve(options.num_iterations);
+    results.old_length.reserve(options.num_iterations);
+    results.new_length.reserve(options.num_iterations);
+    results.accepted.reserve(options.num_iterations);
+
+    for (int iter = 0; iter < options.num_iterations; ++iter) {
+        auto iterStart = chrono::steady_clock::now();
+
+        int    branchIdx = (int)random_num((unsigned int)numBranches);
+        auto   p         = branches[branchIdx];
+        double oldLen    = p->length;
+        double newLen    = oldLen + randu(-options.proposal_width, options.proposal_width);
+
+        bool accept = false;
+        if (newLen > 0.0) {
+            Scalar newLogLik   = updateBranchLength(t, model, patterns, p, newLen);
+
+            //DEBUG CHECK:
+            //Scalar newLogCheck = computeLikelihood(t, model, patterns, sw);
+            //cerr<<newLogLik<<"\t"<<newLogCheck<<endl;
+            //TO HERE
+
+            // Prior ratio for exponential: log p(new) - log p(old) = -rate*(new - old)
+            Scalar newLogPrior = logPrior + options.prior_rate * (oldLen - newLen);
+            Scalar newLogPost  = newLogLik + newLogPrior;
+
+            // Metropolis-Hastings; proposal is symmetric so no Hastings correction needed
+            accept = (log(randu()) < newLogPost - logPost);
+
+            if (accept) {
+                logLik   = newLogLik;
+                logPrior = newLogPrior;
+                logPost  = newLogPost;
+            } else {
+                updateBranchLength(t, model, patterns, p, oldLen);  // restore
+            }
+        }
+        // newLen <= 0: proposal falls outside prior support; reject without touching tree
+
+        double iterSecs = chrono::duration<double>(chrono::steady_clock::now() - iterStart).count();
+
+        results.logPosterior.push_back(logPost);
+        results.iterTime.push_back(iterSecs);
+        results.branch.push_back(branchIdx);
+        results.old_length.push_back(oldLen);
+        results.new_length.push_back(newLen);
+        results.accepted.push_back(accept);
+    }
+
     return results;
 }
 
@@ -243,8 +321,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Compress sites into patterns (TSP-ordered to minimise inter-pattern distance)
-    long tourLength = 0;
-    vector<pair<Pattern,int>> patterns = tspPatternSort(alignment, tourLength);
+    vector<pair<Pattern,int>> patterns = sortPatterns(alignment);
 
     // Read tree file (first tree only)
     phylo<basic_newick> newickTree;
