@@ -12,6 +12,7 @@
 #include "Phylib/phylib.h"
 #include "standardLikelihood.h"
 #include "DecompositionTree/decompositionTree.h"
+#include "DecompositionTree/decompositionLikelihood.h"
 
 using namespace Phylib;
 
@@ -260,17 +261,95 @@ static MCMCResults runStandardMCMC(
     return results;
 }
 
+// Shared implementation for both decomposition-tree MCMC variants.
+// useLvD=false → pruning layout; useLvD=true → LvD (greedy) layout.
+static MCMCResults runDecomMCMC(
+        phylo<basic_newick>&             tree,
+        const SubstModel&                model,
+        const vector<pair<Pattern,int>>& patterns,
+        const MCMCOptions&               options,
+        bool                             useLvD)
+{
+    seed_random(42);
+
+    phylo<DecomNodeData> decomBase;
+    if (useLvD)
+        constructDecompTree(tree, decomBase, true);
+    else
+        constructPruningDecomp(tree, decomBase);
+
+    phylo<DecomNodeDataAllSites> t;
+    copy(decomBase, t);
+
+    Stopwatch sw;
+    vector<double> patternL;
+    Scalar logLik = computeLikelihood(t, model, patterns, patternL, sw);
+
+    Scalar logPrior = 0.0;
+    for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
+        if (p.leaf())
+            logPrior += log(options.prior_rate) - options.prior_rate * p->length;
+    Scalar logPost = logLik + logPrior;
+
+    vector<phylo<DecomNodeDataAllSites>::iterator> branches;
+    for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
+        if (p.leaf())
+            branches.push_back(p);
+    int numBranches = (int)branches.size();
+
+    MCMCResults results;
+    results.logPosterior.reserve(options.num_iterations);
+    results.iterTime.reserve(options.num_iterations);
+    results.branch.reserve(options.num_iterations);
+    results.old_length.reserve(options.num_iterations);
+    results.new_length.reserve(options.num_iterations);
+    results.accepted.reserve(options.num_iterations);
+
+    for (int iter = 0; iter < options.num_iterations; ++iter) {
+        auto iterStart = chrono::steady_clock::now();
+
+        int    branchIdx = (int)random_num((unsigned int)numBranches);
+        auto   p         = branches[branchIdx];
+        double oldLen    = p->length;
+        double newLen    = oldLen + randu(-options.proposal_width, options.proposal_width);
+
+        bool accept = false;
+        if (newLen > 0.0) {
+            Scalar newLogLik   = updateBranchLength(t, model, patterns, patternL, p, newLen);
+            Scalar newLogPrior = logPrior + options.prior_rate * (oldLen - newLen);
+            Scalar newLogPost  = newLogLik + newLogPrior;
+
+            accept = (log(randu()) < newLogPost - logPost);
+
+            if (accept) {
+                logLik   = newLogLik;
+                logPrior = newLogPrior;
+                logPost  = newLogPost;
+            } else {
+                updateBranchLength(t, model, patterns, patternL, p, oldLen);  // restore
+            }
+        }
+
+        double iterSecs = chrono::duration<double>(chrono::steady_clock::now() - iterStart).count();
+
+        results.logPosterior.push_back(logPost);
+        results.iterTime.push_back(iterSecs);
+        results.branch.push_back(branchIdx);
+        results.old_length.push_back(oldLen);
+        results.new_length.push_back(newLen);
+        results.accepted.push_back(accept);
+    }
+
+    return results;
+}
+
 static MCMCResults runPruningMCMC(
         phylo<basic_newick>&             tree,
         const SubstModel&                model,
         const vector<pair<Pattern,int>>& patterns,
         const MCMCOptions&               options)
 {
-    MCMCResults results;
-    results.logPosterior.reserve(options.num_iterations);
-    results.iterTime.reserve(options.num_iterations);
-    // TODO: implement using constructPruningDecomp / computeLikelihood(DecomNodeData)
-    return results;
+    return runDecomMCMC(tree, model, patterns, options, false);
 }
 
 static MCMCResults runLvDMCMC(
@@ -279,11 +358,7 @@ static MCMCResults runLvDMCMC(
         const vector<pair<Pattern,int>>& patterns,
         const MCMCOptions&               options)
 {
-    MCMCResults results;
-    results.logPosterior.reserve(options.num_iterations);
-    results.iterTime.reserve(options.num_iterations);
-    // TODO: implement using constructDecompTree / computeLikelihood(DecomNodeData)
-    return results;
+    return runDecomMCMC(tree, model, patterns, options, true);
 }
 
 

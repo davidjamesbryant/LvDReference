@@ -71,6 +71,13 @@ public:
     DecomNodeDataAllSites() : basic_newick(), external(false), isClade(false),
                               isDirty(false), nSites(0), mergeType(0) {}
 
+    // Conversion constructor from DecomNodeData: copies topology fields, leaves partials unallocated.
+    // Required by Phylib::copy<DecomNodeData, DecomNodeDataAllSites>.
+    DecomNodeDataAllSites(const DecomNodeData& d)
+        : basic_newick(static_cast<const basic_newick&>(d)),
+          external(d.external), isClade(d.isClade),
+          isDirty(false), nSites(0), mergeType(d.mergeType) {}
+
     // Allocating constructor: allocates partialVec (clade nodes) or partialMat (segment nodes).
     DecomNodeDataAllSites(bool isClade_, int nSites_)
         : basic_newick(), external(false), isClade(isClade_),
