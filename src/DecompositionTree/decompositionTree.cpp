@@ -282,7 +282,7 @@ static Merger* getGreedyValidNeighbor(int i, vector<DecomTableData>& dtable) {
     }
     if (min_notV_j >=0)
         return new Merger(minMerge);
-    else if (min_V_j)
+    else if (min_V_j >= 0)
         return new Merger(minVMerge);
     else
         return nullptr;
@@ -343,7 +343,7 @@ static void buildDecomTable(phylo<DecomVertexData>& tree, int n, vector<DecomTab
             dtable[j].bud = v;
             v -> bndry0 = j;
             dtable[j].length = v->length;
-            dtable[i].mergeType = 0;
+            dtable[j].mergeType = 0;
             j++;
         }
     }

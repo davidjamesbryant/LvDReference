@@ -274,7 +274,7 @@ static MCMCResults runDecomMCMC(
 
     phylo<DecomNodeData> decomBase;
     if (useLvD)
-        constructDecompTree(tree, decomBase, true);
+        constructDecompTree(tree, decomBase, false);
     else
         constructPruningDecomp(tree, decomBase);
 
@@ -316,6 +316,11 @@ static MCMCResults runDecomMCMC(
         bool accept = false;
         if (newLen > 0.0) {
             Scalar newLogLik   = updateBranchLength(t, model, patterns, patternL, p, newLen);
+
+            //DEBUG CODE
+            //Scalar fullLogLik = computeLikelihood(t, model, patterns, patternL, sw);
+            //cerr<<newLogLik<<"\t"<<fullLogLik<<endl;
+
             Scalar newLogPrior = logPrior + options.prior_rate * (oldLen - newLen);
             Scalar newLogPost  = newLogLik + newLogPrior;
 
