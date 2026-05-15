@@ -8,6 +8,7 @@
 #include "decompositionLikelihood.h"
 
 
+
 /**
  Compute the tree likelihoods.
  
@@ -671,9 +672,14 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
                         l->partialMat.middleCols(4 * s, 4) * r->partialVec.col(s).asDiagonal();
                 break;
             case 4:
-                for (int s = 0; s < nSites; s++)
-                    q->partialVec.col(s) =
-                        l->partialMat.middleCols(4 * s, 4) * r->partialVec.col(s);
+                // When l is a decomp-tree leaf its partialMat holds the same
+                // 4×4 transition matrix in every slice, so collapse to one GEMM.
+                if (l.leaf())
+                    q->partialVec.noalias() = l->partialMat.leftCols(4) * r->partialVec;
+                else
+                    for (int s = 0; s < nSites; s++)
+                        q->partialVec.col(s).noalias() =
+                            l->partialMat.middleCols(4 * s, 4) * r->partialVec.col(s);
                 break;
             case 5:
                 for (int s = 0; s < nSites; s++)

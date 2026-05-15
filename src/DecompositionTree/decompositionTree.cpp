@@ -343,6 +343,7 @@ static void buildDecomTable(phylo<DecomVertexData>& tree, int n, vector<DecomTab
             dtable[j].bud = v;
             v -> bndry0 = j;
             dtable[j].length = v->length;
+            dtable[j].id = v->id;
             dtable[j].mergeType = 0;
             j++;
         }
@@ -559,6 +560,7 @@ static void  ExtractPruningDecomTree( phylo<basic_newick>::iterator p, phylo<Dec
         
         ITERATOR edgeNode = dtree.insert_child(newNode);
         edgeNode->length = p->length;
+        edgeNode->id = p->id;
         edgeNode->isClade = false;
 
 
