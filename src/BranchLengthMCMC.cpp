@@ -305,6 +305,8 @@ static MCMCResults runDecomMCMC(
     phylo<DecomNodeDataAllSites> t;
     copy(decomBase, t);
 
+    cerr<<"Height of decomposition tree = "<<nodeHeight<DecomNodeData>(decomBase.root())<<endl;
+
     Stopwatch sw;
     vector<double> patternL;
     Scalar logLik = computeLikelihood(t, model, patterns, patternL, sw);

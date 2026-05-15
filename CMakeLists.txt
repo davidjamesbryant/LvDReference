@@ -23,6 +23,7 @@ add_library(lvd_core STATIC
         src/DecompositionTree/decompositionLikelihood.cpp
         src/StandardLikelihood/standardLikelihood.cpp
         src/Phylib/sequences/phylip_seq.cpp
+        src/DecompositionTree/PartialLikelihoodTensor.h
 )
 
 target_include_directories(lvd_core PUBLIC ${LVD_INCLUDE_DIRS})
