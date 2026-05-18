@@ -43,3 +43,6 @@ foreach(TARGET RunSimulation TreeHeights LvDLikelihoods TidyTree BranchLengthMCM
     add_executable(${TARGET} src/${TARGET}.cpp)
     target_link_libraries(${TARGET} PRIVATE lvd_core)
 endforeach()
+
+add_executable(TestPartialLikelihoodTensor src/TestPartialLikelihoodTensor.cpp)
+target_link_libraries(TestPartialLikelihoodTensor PRIVATE lvd_core)

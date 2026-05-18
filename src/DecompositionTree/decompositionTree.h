@@ -12,6 +12,7 @@
 #include <Eigen>
 #include "phylib.h"
 #include "../StandardLikelihood/standardLikelihood.h"
+#include "PartialLikelihoodTensor.h"
 
 using namespace Phylib;
 
@@ -28,8 +29,9 @@ public:
     
     //Store the partial likelihood information. We store both a vector and a matrix. This creates redundancy (we only need one),
     //but I figure that this allows compilation time improvements for minimal extra memory usage.
-    //An alternative is to have a different class for clades and segments, both of which inherit from DecomNodeData
-    
+
+
+
     Eigen::Matrix<Scalar, 4, 1>  partialVec;
     Eigen::Matrix<Scalar, 4, 4>  partialMat;
     
@@ -46,11 +48,11 @@ public:
 /**
  Like DecomNodeData but stores partial likelihoods for all sites/patterns at once.
 
- partialVec is 4 x nSites: column s holds the four state partial likelihoods for site s.
-   Only allocated when isClade == true.
+ partialVec is 4 x size: column s holds the four state partial likelihoods for site s.
+   Only allocated when isVectors == true.
 
- partialMat is 4 x (4*nSites): the s-th 4x4 matrix occupies middleCols(4*s, 4).
-   Only allocated when isClade == false.
+ partialMat is 4 x (4*size): the s-th 4x4 matrix occupies middleCols(4*s, 4).
+   Only allocated when isVectors == false.
 
  exponents is a per-site underflow correction vector (one entry per site).
  */
@@ -61,34 +63,29 @@ public:
     bool isDirty;
 
     int nSites;
-    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialVec;  // 4 x nSites        (clades only)
-    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialMat;  // 4 x (4*nSites)    (segments only)
+    PartialLikelihoodTensor partialLikes;
+
+//    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialVec;  // 4 x size        (clades only)
+//    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialMat;  // 4 x (4*size)    (segments only)
     Eigen::VectorXi exponents;                             // one per site
 
     int mergeType;
 
     // Default constructor: does not allocate partial likelihood storage.
-    DecomNodeDataAllSites() : basic_newick(), external(false), isClade(false),
-                              isDirty(false), nSites(0), mergeType(0) {}
+    //DecomNodeDataAllSites() : basic_newick(), external(false), isVectors(false),
+     //                         isDirty(false), size(0), mergeType(0) {}
 
     // Conversion constructor from DecomNodeData: copies topology fields, leaves partials unallocated.
     // Required by Phylib::copy<DecomNodeData, DecomNodeDataAllSites>.
-    DecomNodeDataAllSites(const DecomNodeData& d)
-        : basic_newick(static_cast<const basic_newick&>(d)),
-          external(d.external), isClade(d.isClade),
-          isDirty(false), nSites(0), mergeType(d.mergeType) {}
+    // DecomNodeDataAllSites(const DecomNodeData& d)
+    //     : basic_newick(static_cast<const basic_newick&>(d)),
+    //       external(d.external), isVectors(d.isVectors),
+    //       isDirty(false), size(0), mergeType(d.mergeType) {}
 
     // Allocating constructor: allocates partialVec (clade nodes) or partialMat (segment nodes).
-    DecomNodeDataAllSites(bool isClade_, int nSites_)
-        : basic_newick(), external(false), isClade(isClade_),
+    DecomNodeDataAllSites(bool isClade_, int nSites_, bool external_) : external(external_), isClade(isClade_),
           isDirty(false), nSites(nSites_), mergeType(0) {
-        if (isClade) {
-            partialVec.resize(4, nSites);
-            partialVec.setZero();
-        } else {
-            partialMat.resize(4, 4 * nSites);
-            partialMat.setZero();
-        }
+
         exponents.resize(nSites);
         exponents.setZero();
     }

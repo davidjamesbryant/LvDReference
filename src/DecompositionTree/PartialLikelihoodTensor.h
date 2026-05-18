@@ -22,1096 +22,268 @@ class PartialLikelihoodTensor
 {
 private:
     std::vector<Scalar> data;
-    bool isClade;
-    bool multisite;
-    int nSites;
+    bool isVectors;  //True if this is 4xnsites, false if this is 4x4xnSites
+    std::size_t size; //1 if this is a single vector or matrix, more if this is an array of vectors or matrices
 public:
-    PartialLikelihoodTensor(bool _isClade, bool _multisite, int _nSites): isClade(_isClade), multisite(_multisite), nSites(_nSites)
-    {
-        if (isClade)
-        {
-            if (multisite)
-                data.resize(4 * nSites);
-            else
-                data.resize(4);
-        } else
-        {
-            if (multisite)
-                data.resize(16*nSites);
-            else
-                data.resize(16);
-        }
-    }
+    PartialLikelihoodTensor() : isVectors(false), size(0) {}  //Default constructor - no allocation
 
-    void fill(Eigen::Matrix<Scalar, 4, 1> mat)
+    PartialLikelihoodTensor(bool isVectors_, std::size_t size): isVectors(isVectors_), size(size)
     {
-        assert(isClade);
-        if (multisite)
-        {
-            for (std::size_t s=0;s<nSites; s++)
-            {
-                for (std::size_t i=0;i<4;i++)
-                    data[s * 4 + i] = mat(i,0);
-            }
-        }
+        if (isVectors)
+            data.resize(4*size);
         else
+            data.resize(16*size);
+    }
+
+    /**
+     * Change the type of storage and reallocate as necessary
+     * @param isVectors_
+     * @param size_
+     */
+    void resize(bool isVectors_, std::size_t size_)
+    {
+        isVectors = isVectors_;
+        size = size_;
+        if (isVectors)
+            data.resize(4*size);
+        else
+            data.resize(16*size);
+    }
+
+    /**
+     * Set entry i in position p of this 4xs tensor
+     * @param s
+     * @param i
+     * @param val
+     */
+    void set(std::size_t p, std::size_t  i, Scalar val)
+    {
+        assert(isVectors && p < size && i < 4);
+        data[4*p + i] = val;
+    }
+
+    /**
+     * Copy col into position p of this  4xs tensor
+     * @param p position number
+     * @param col column vector
+     */
+    void set_column(std::size_t p, const Eigen::Matrix<Scalar,4,1>& col)
+    {
+        assert(isVectors && p < size && col.size() == 4);
+        for (std::size_t i=0;i<4;i++)
+            data[4*p + i] = col(i);
+    }
+
+    /**
+     * Fill column p with repeated val values
+     * @param p
+     * @param val
+     */
+    void fill_column(std::size_t p, Scalar val)
+    {
+        assert(isVectors && p<size);
+        for (std::size_t i=0;i<4;i++)
         {
-            for (std::size_t i=0;i<4;i++)
-                data[i] = mat(i,0);
+            data[p*4 + i] = val;
         }
     }
 
-    void fill(Eigen::Matrix<Scalar, 4, 4> mat)
+
+    /**
+     * Copy mat into this 4x4 tensor
+     * @param mat
+     */
+    void set(const Eigen::Matrix<Scalar,4,4>& mat)
     {
-        assert(!isClade);
-        if (multisite)
+        assert(!isVectors&&size==1);
+        for (std::size_t i=0;i<4;i++)
+            for (std::size_t j=0;j<4;j++)
+                data[4*i + j] = mat(i,j);
+    }
+
+    /**
+     * Make this tensor equal to A.*B
+     * @param vecsA
+     * @param vecsB
+     */
+    void dot_times(const PartialLikelihoodTensor& vecsA, const PartialLikelihoodTensor& vecsB)
+    {
+        assert(size == vecsA.size && size == vecsB.size);
+        assert(isVectors && vecsA.isVectors && vecsB.isVectors);
+
+        for (std::size_t p=0;p<size;p++)
+            for (std::size_t i=0;i<4;i++)
+                data[4*p + i] = vecsA.data[4*p + i] * vecsB.data[4*p + i];
+    }
+
+    /**
+     * Scale rows of matrix in position p of matsB with vector from position p of vecsA. Fill this tensor
+     * with the result. If matsB has size 1 then pretend like matsB is copies of the same matrix.
+     * then
+     * @param vecsA
+     * @param matsB
+     */
+    void scale_rows(const PartialLikelihoodTensor& vecsA, const PartialLikelihoodTensor& matsB)
+    {
+        assert(!isVectors && size == vecsA.size && vecsA.isVectors && !matsB.isVectors);
+        if (matsB.size==1)
         {
-            for (std::size_t s=0;s<nSites; s++)
-            {
+            for (std::size_t p=0;p<size;p++)
                 for (std::size_t i=0;i<4;i++)
                     for (std::size_t j=0;j<4;j++)
-                        data[16*s + 4*i + j] = mat(i,j);
-            }
+                        data[16*p + 4*i + j] = vecsA.data[4*p + i] * matsB.data[4*i + j];
         } else
         {
-            for (std::size_t i=0;i<4;i++)
-                for (std::size_t j=0;j<4;j++)
-                    data[4*i + j] = mat(i,j);
-        }
-    }
-
-    friend void product(const PartialLikelihoodTensor& a, const PartialLikelihoodTensor& b, PartialLikelihoodTensor& c)
-    {
-        //If a is a clade then b has to be too. But either can be multisite.
-        if (a.isClade && !a.multisite) //a is a clade, same for all sites
-        {
-            assert(b.isClade);
-            if (!b.multisite) //b is a clade, same for all sites
-                vec_vec(a.data, b.data, c.data);
-            else  //b is a clade, different for all sites
-                vec_multivec(a.data, b.data, c.data);
-        }
-        if (a.isClade && !!a.multisite) //a is a clade, different for all sites
-        {
-            assert(b.isClade);
-            if (!b.multisite) //b is a clade, same for all sites
-                vec_multivec(b.data, a.data, c.data); //Note - entrywise multiplication commutes
-            else //b is a clade, different for all sites
-                multivec_multivec(a.data, b.data, c.data);
-        }
-
-        //If a is a matrix, then b can be a clade or a matrix. Either can be !multisite
-        if (!a.isClade && !a.multisite)
-        {
-            //a is a segment, same for all sites
-            if (b.isClade && !b.multisite) //b is a clade, same for all sites
-                mat_vec(a.data, b.data, c.data);
-            else if (b.isClade && !!b.multisite) //b is a clade, different for all sites
-                mat_multivec(a.data, b.data, c.data);
-            else if (!b.isClade && !b.multisite) //b is a segment, same for all sites
-                mat_mat(a.data, b.data, c.data);
-            else if (!b.isClade && !!b.multisite) //b is a segment, different for all sites
-                mat_multimat(a.data, b.data, c.data);
-        }
-
-        if (!a.isClade && !!a.multisite)
-        {
-            //a is a segment, different for all sites
-            if (b.isClade && !b.multisite) //b is a clade, same for all sites
-                multimat_vec(a.data, b.data, c.data);
-            else if (b.isClade && !!b.multisite) //b is a clade, different for all sites
-                multimat_multivec(a.data, b.data, c.data);
-            else if (!b.isClade && !b.multisite) //b is a segment, same for all sites
-                multimat_mat(a.data, b.data, c.data);
-            else if (!b.isClade && !!b.multisite) //b is a segment, different for all sites
-                multimat_multimat(a.data, b.data, c.data);
-        }
-    }
-
-private:
-    // ============================================================
-    //
-    // In the following:
-    //      A multivec is a 4xs matrix, each column being a vector
-    //      A multiMat is a 4x(4s) matrix, each 4 columns making up a 4x4 matrix
-    //
-    // ============================================================
-
-
-
-    // --------------------------------------------------------
-    // Vector-vector element-wise multiply
-    //
-    // Computes:
-    //
-    //   C[i]
-    //      = A[i] B[i]
-    //
-    // A size: 4
-    // B size: 4
-    // C size: 4
-    // --------------------------------------------------------
-    static inline void vec_vec(const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size()==4 && B.size()==4 && C.size()==4);
-
-        const Scalar* Ap = A.data();
-        const Scalar* Bp = B.data();
-        Scalar* Cp = C.data();
-
-        Cp[0] = Ap[0] * Bp[0];
-        Cp[1] = Ap[1] * Bp[1];
-        Cp[2] = Ap[2] * Bp[2];
-        Cp[3] = Ap[3] * Bp[3];
-    }
-
-    // --------------------------------------------------------
-    // Vector-multivector element-wise multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = A[i] B[p][i]
-    //
-    // A size: 4
-    // B size: 4*s
-    // C size: 4*s
-    // --------------------------------------------------------
-
-    static inline void vec_multivec(const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() == 4);
-        assert(B.size() % 4 == 0);
-        assert(C.size() == B.size());
-
-        const std::size_t s = B.size() / 4;
-        const Scalar* Ap = A.data();
-        const Scalar* Bdata = B.data();
-        Scalar* Cdata = C.data();
-
-        for (std::size_t p = 0; p < s; ++p)
-        {
-            const Scalar* Bp = Bdata + 4*p;
-            Scalar* Cp = Cdata + 4*p;
-
-            Cp[0] = Ap[0] * Bp[0];
-            Cp[1] = Ap[1] * Bp[1];
-            Cp[2] = Ap[2] * Bp[2];
-            Cp[3] = Ap[3] * Bp[3];
-        }
-    }
-
-    // --------------------------------------------------------
-    // Multivector-multivector element-wise multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = A[i] B[p][i]
-    //
-    // A size: 4
-    // B size: 4*s
-    // C size: 4*s
-    // --------------------------------------------------------
-
-    static inline void multivec_multivec(const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() % 4 ==  0);
-        assert(B.size() == A.size());
-        assert(C.size() == B.size());
-
-        const std::size_t s = A.size() / 4;
-        const Scalar* Adata = A.data();
-        const Scalar* Bdata = B.data();
-        Scalar* Cdata = C.data();
-
-        for (std::size_t p = 0; p < s; ++p)
-        {
-            const Scalar* Ap = Adata + 4*p;
-            const Scalar* Bp = Bdata + 4*p;
-            Scalar* Cp = Cdata + 4*p;
-
-            Cp[0] = Ap[0] * Bp[0];
-            Cp[1] = Ap[1] * Bp[1];
-            Cp[2] = Ap[2] * Bp[2];
-            Cp[3] = Ap[3] * Bp[3];
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // Matrix-vector multiply
-    //
-    // Computes:
-    //
-    //   C[i]
-    //      = sum_k A[i][k] B[k]
-    //
-    // A size: 16
-    // B size: 4
-    // C size: 4
-    // --------------------------------------------------------
-
-    static inline void mat_vec(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C
-    )
-    {
-        assert(A.size() == 16 && B.size() == 4 && C.size() == 4);
-
-        const Scalar* Ap = A.data();
-        const Scalar* Bp = B.data();
-        Scalar* Cp = C.data();
-
-        Cp[0] = Ap[0]*Bp[0] + Ap[1]*Bp[1] + Ap[2]*Bp[2] + Ap[3]*Bp[3];
-        Cp[1] = Ap[4]*Bp[0] + Ap[5]*Bp[1] + Ap[6]*Bp[2] + Ap[7]*Bp[3];
-        Cp[2] = Ap[8]*Bp[0] + Ap[9]*Bp[1] + Ap[10]*Bp[2] + Ap[11]*Bp[3];
-        Cp[3] = Ap[12]*Bp[0] + Ap[13]*Bp[1] + Ap[14]*Bp[2] + Ap[15]*Bp[3];
-    }
-
-    // --------------------------------------------------------
-    // Matrix-multivector multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = sum_k A[i][k] B[p][k]
-    //
-    // A size: 16
-    // B size: 4*s
-    // C size: 4*s
-    // --------------------------------------------------------
-
-
-    static inline void mat_multivec(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() == 16 && B.size() % 4 == 0 && C.size() == B.size());
-
-        const std::size_t s = B.size() / 4;
-        const Scalar* Ap = A.data();
-        const Scalar* Bdata = B.data();
-        Scalar* Cdata = C.data();
-
-        for (std::size_t p = 0; p < s; ++p)
-        {
-            const Scalar* Bp = Bdata + 4*p;
-            Scalar* Cp = Cdata + 4*p;
-
-            Cp[0] = Ap[0]*Bp[0] + Ap[1]*Bp[1] + Ap[2]*Bp[2] + Ap[3]*Bp[3];
-            Cp[1] = Ap[4]*Bp[0] + Ap[5]*Bp[1] + Ap[6]*Bp[2] + Ap[7]*Bp[3];
-            Cp[2] = Ap[8]*Bp[0] + Ap[9]*Bp[1] + Ap[10]*Bp[2] + Ap[11]*Bp[3];
-            Cp[3] = Ap[12]*Bp[0] + Ap[13]*Bp[1] + Ap[14]*Bp[2] + Ap[15]*Bp[3];
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // Matrix-matrix multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = sum_k A[i][k] B[p][k]
-    //
-    // A size: 16
-    // B size: 16
-    // C size: 16
-    // --------------------------------------------------------
-
-    static inline void mat_mat(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() == 16 && B.size() == 16 && C.size() == 16);
-
-        const Scalar* Ap = A.data();
-        const Scalar* Bp = B.data();
-        Scalar* Cp = C.data();
-
-        Cp[0]  = Ap[0]*Bp[0]  + Ap[1]*Bp[4]  + Ap[2]*Bp[8]  + Ap[3]*Bp[12];
-        Cp[1]  = Ap[0]*Bp[1]  + Ap[1]*Bp[5]  + Ap[2]*Bp[9]  + Ap[3]*Bp[13];
-        Cp[2]  = Ap[0]*Bp[2]  + Ap[1]*Bp[6]  + Ap[2]*Bp[10] + Ap[3]*Bp[14];
-        Cp[3]  = Ap[0]*Bp[3]  + Ap[1]*Bp[7]  + Ap[2]*Bp[11] + Ap[3]*Bp[15];
-
-        Cp[4]  = Ap[4]*Bp[0]  + Ap[5]*Bp[4]  + Ap[6]*Bp[8]  + Ap[7]*Bp[12];
-        Cp[5]  = Ap[4]*Bp[1]  + Ap[5]*Bp[5]  + Ap[6]*Bp[9]  + Ap[7]*Bp[13];
-        Cp[6]  = Ap[4]*Bp[2]  + Ap[5]*Bp[6]  + Ap[6]*Bp[10] + Ap[7]*Bp[14];
-        Cp[7]  = Ap[4]*Bp[3]  + Ap[5]*Bp[7]  + Ap[6]*Bp[11] + Ap[7]*Bp[15];
-
-        Cp[8]  = Ap[8]*Bp[0]  + Ap[9]*Bp[4]  + Ap[10]*Bp[8]  + Ap[11]*Bp[12];
-        Cp[9]  = Ap[8]*Bp[1]  + Ap[9]*Bp[5]  + Ap[10]*Bp[9]  + Ap[11]*Bp[13];
-        Cp[10] = Ap[8]*Bp[2]  + Ap[9]*Bp[6]  + Ap[10]*Bp[10] + Ap[11]*Bp[14];
-        Cp[11] = Ap[8]*Bp[3]  + Ap[9]*Bp[7]  + Ap[10]*Bp[11] + Ap[11]*Bp[15];
-
-        Cp[12] = Ap[12]*Bp[0] + Ap[13]*Bp[4] + Ap[14]*Bp[8]  + Ap[15]*Bp[12];
-        Cp[13] = Ap[12]*Bp[1] + Ap[13]*Bp[5] + Ap[14]*Bp[9]  + Ap[15]*Bp[13];
-        Cp[14] = Ap[12]*Bp[2] + Ap[13]*Bp[6] + Ap[14]*Bp[10] + Ap[15]*Bp[14];
-        Cp[15] = Ap[12]*Bp[3] + Ap[13]*Bp[7] + Ap[14]*Bp[11] + Ap[15]*Bp[15];
-    }
-
-
-    // --------------------------------------------------------
-    // Multimatrix-vector multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = sum_k A[p][i][k] B[k]
-    //
-    // A size: 16*s
-    // B size: 4
-    // C size: 4*s
-    // --------------------------------------------------------
-    static inline void multimat_vec(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() % 16 == 0 && B.size() == 4 && C.size() == A.size()/4);
-
-        const std::size_t s = A.size() / 16;
-        const Scalar* Adata = A.data();
-        const Scalar* Bp = B.data();
-        Scalar* Cdata = C.data();
-
-        for (std::size_t p = 0; p < s; ++p)
-        {
-            const Scalar* Ap = Adata + 16*p;
-            Scalar* Cp = Cdata + 4*p;
-
-            Cp[0] = Ap[0]*Bp[0] + Ap[1]*Bp[1] + Ap[2]*Bp[2] + Ap[3]*Bp[3];
-            Cp[1] = Ap[4]*Bp[0] + Ap[5]*Bp[1] + Ap[6]*Bp[2] + Ap[7]*Bp[3];
-            Cp[2] = Ap[8]*Bp[0] + Ap[9]*Bp[1] + Ap[10]*Bp[2] + Ap[11]*Bp[3];
-            Cp[3] = Ap[12]*Bp[0] + Ap[13]*Bp[1] + Ap[14]*Bp[2] + Ap[15]*Bp[3];
-        }
-    }
-
-
-
-    // --------------------------------------------------------
-    // Multimatrix-multivector multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = sum_k A[p][i][k] B[p][k]
-    //
-    // A size: 16*s
-    // B size: 4*s
-    // C size: 4*s
-    // --------------------------------------------------------
-
-    static inline void multimat_multivec(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() % 16 == 0);
-
-        const std::size_t nSites = A.size() / 16;
-
-        assert(B.size() == 4 * nSites);
-        assert(C.size() == 4 * nSites);
-
-        const Scalar* Adata = A.data();
-        const Scalar* Bdata = B.data();
-        Scalar* Cdata = C.data();
-
-        for (std::size_t p = 0; p < nSites; ++p)
-        {
-            const Scalar* Ap = Adata + 16*p;
-            const Scalar* Bp = Bdata + 4*p;
-            Scalar* Cp = Cdata + 4*p;
-
-            Cp[0] = Ap[0]*Bp[0] + Ap[1]*Bp[1] + Ap[2]*Bp[2] + Ap[3]*Bp[3];
-            Cp[1] = Ap[4]*Bp[0] + Ap[5]*Bp[1] + Ap[6]*Bp[2] + Ap[7]*Bp[3];
-            Cp[2] = Ap[8]*Bp[0] + Ap[9]*Bp[1] + Ap[10]*Bp[2] + Ap[11]*Bp[3];
-            Cp[3] = Ap[12]*Bp[0] + Ap[13]*Bp[1] + Ap[14]*Bp[2] + Ap[15]*Bp[3];
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // Matrix-multimatrix multiply
-    //
-    // Computes:
-    //
-    //   C[p][i][j]
-    //      = sum_k A[i][k] B[p][k][j]
-    //
-    // A size: 16
-    // B size: 16*s
-    // C size: 16*s
-    // --------------------------------------------------------
-
-    static inline void mat_multimat(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() == 16);
-        assert(B.size() % 16 == 0);
-        std::size_t s = B.size() / 16;
-        assert(C.size() == B.size());
-
-        const Scalar* Ap = A.data();
-        const Scalar* Bdata = B.data();
-        Scalar* Cdata = C.data();
-
-        for (std::size_t p = 0; p < s; ++p)
-        {
-            const Scalar* Bp = Bdata + 16*p;
-            Scalar* Cp = Cdata + 16*p;
-
-            Cp[0]  = Ap[0]*Bp[0]  + Ap[1]*Bp[4]  + Ap[2]*Bp[8]  + Ap[3]*Bp[12];
-            Cp[1]  = Ap[0]*Bp[1]  + Ap[1]*Bp[5]  + Ap[2]*Bp[9]  + Ap[3]*Bp[13];
-            Cp[2]  = Ap[0]*Bp[2]  + Ap[1]*Bp[6]  + Ap[2]*Bp[10] + Ap[3]*Bp[14];
-            Cp[3]  = Ap[0]*Bp[3]  + Ap[1]*Bp[7]  + Ap[2]*Bp[11] + Ap[3]*Bp[15];
-
-            Cp[4]  = Ap[4]*Bp[0]  + Ap[5]*Bp[4]  + Ap[6]*Bp[8]  + Ap[7]*Bp[12];
-            Cp[5]  = Ap[4]*Bp[1]  + Ap[5]*Bp[5]  + Ap[6]*Bp[9]  + Ap[7]*Bp[13];
-            Cp[6]  = Ap[4]*Bp[2]  + Ap[5]*Bp[6]  + Ap[6]*Bp[10] + Ap[7]*Bp[14];
-            Cp[7]  = Ap[4]*Bp[3]  + Ap[5]*Bp[7]  + Ap[6]*Bp[11] + Ap[7]*Bp[15];
-
-            Cp[8]  = Ap[8]*Bp[0]  + Ap[9]*Bp[4]  + Ap[10]*Bp[8]  + Ap[11]*Bp[12];
-            Cp[9]  = Ap[8]*Bp[1]  + Ap[9]*Bp[5]  + Ap[10]*Bp[9]  + Ap[11]*Bp[13];
-            Cp[10] = Ap[8]*Bp[2]  + Ap[9]*Bp[6]  + Ap[10]*Bp[10] + Ap[11]*Bp[14];
-            Cp[11] = Ap[8]*Bp[3]  + Ap[9]*Bp[7]  + Ap[10]*Bp[11] + Ap[11]*Bp[15];
-
-            Cp[12] = Ap[12]*Bp[0] + Ap[13]*Bp[4] + Ap[14]*Bp[8]  + Ap[15]*Bp[12];
-            Cp[13] = Ap[12]*Bp[1] + Ap[13]*Bp[5] + Ap[14]*Bp[9]  + Ap[15]*Bp[13];
-            Cp[14] = Ap[12]*Bp[2] + Ap[13]*Bp[6] + Ap[14]*Bp[10] + Ap[15]*Bp[14];
-            Cp[15] = Ap[12]*Bp[3] + Ap[13]*Bp[7] + Ap[14]*Bp[11] + Ap[15]*Bp[15];
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // Multimatrix-matrix multiply
-    //
-    // Computes:
-    //
-    //   C[p][i][j]
-    //      = sum_k A[p][i][k] B[k][j]
-    //
-    // A size: 16*s
-    // B size: 16
-    // C size: 16*s
-    // --------------------------------------------------------
-    static inline void multimat_mat(
-    const std::vector<Scalar>& A,
-    const std::vector<Scalar>& B,
-    std::vector<Scalar>& C)
-    {
-        assert(A.size() % 16 == 0);
-        assert(B.size() == 16);
-        assert(C.size() == A.size());
-
-        const std::size_t s = A.size() / 16;
-        const Scalar* Adata = A.data();
-        const Scalar* Bp = B.data();
-        Scalar* Cdata = C.data();
-
-        for (std::size_t p = 0; p < s; ++p) {
-            const Scalar* Ap = Adata + 16*p;
-            Scalar* Cp = Cdata + 16*p;
-
-            Cp[0]  = Ap[0]*Bp[0]  + Ap[1]*Bp[4]  + Ap[2]*Bp[8]  + Ap[3]*Bp[12];
-            Cp[1]  = Ap[0]*Bp[1]  + Ap[1]*Bp[5]  + Ap[2]*Bp[9]  + Ap[3]*Bp[13];
-            Cp[2]  = Ap[0]*Bp[2]  + Ap[1]*Bp[6]  + Ap[2]*Bp[10] + Ap[3]*Bp[14];
-            Cp[3]  = Ap[0]*Bp[3]  + Ap[1]*Bp[7]  + Ap[2]*Bp[11] + Ap[3]*Bp[15];
-
-            Cp[4]  = Ap[4]*Bp[0]  + Ap[5]*Bp[4]  + Ap[6]*Bp[8]  + Ap[7]*Bp[12];
-            Cp[5]  = Ap[4]*Bp[1]  + Ap[5]*Bp[5]  + Ap[6]*Bp[9]  + Ap[7]*Bp[13];
-            Cp[6]  = Ap[4]*Bp[2]  + Ap[5]*Bp[6]  + Ap[6]*Bp[10] + Ap[7]*Bp[14];
-            Cp[7]  = Ap[4]*Bp[3]  + Ap[5]*Bp[7]  + Ap[6]*Bp[11] + Ap[7]*Bp[15];
-
-            Cp[8]  = Ap[8]*Bp[0]  + Ap[9]*Bp[4]  + Ap[10]*Bp[8]  + Ap[11]*Bp[12];
-            Cp[9]  = Ap[8]*Bp[1]  + Ap[9]*Bp[5]  + Ap[10]*Bp[9]  + Ap[11]*Bp[13];
-            Cp[10] = Ap[8]*Bp[2]  + Ap[9]*Bp[6]  + Ap[10]*Bp[10] + Ap[11]*Bp[14];
-            Cp[11] = Ap[8]*Bp[3]  + Ap[9]*Bp[7]  + Ap[10]*Bp[11] + Ap[11]*Bp[15];
-
-            Cp[12] = Ap[12]*Bp[0] + Ap[13]*Bp[4] + Ap[14]*Bp[8]  + Ap[15]*Bp[12];
-            Cp[13] = Ap[12]*Bp[1] + Ap[13]*Bp[5] + Ap[14]*Bp[9]  + Ap[15]*Bp[13];
-            Cp[14] = Ap[12]*Bp[2] + Ap[13]*Bp[6] + Ap[14]*Bp[10] + Ap[15]*Bp[14];
-            Cp[15] = Ap[12]*Bp[3] + Ap[13]*Bp[7] + Ap[14]*Bp[11] + Ap[15]*Bp[15];
-        }
-    }
-
-
-
-
-    // --------------------------------------------------------
-    // Multimatrix-multimatrix multiply
-    //
-    // Computes:
-    //
-    //   C[p][i][j]
-    //      = sum_k A[p][i][k] B[p][k][j]
-    //
-    // A size: 16*s
-    // B size: 16*s
-    // C size: 16*s
-    // --------------------------------------------------------
-
-    static inline void multimat_multimat(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() % 16 == 0);
-        assert(B.size() == A.size() && C.size() == A.size());
-
-        const std::size_t s = A.size() / 16;
-        const Scalar* Adata = A.data();
-        const Scalar* Bdata = B.data();
-        Scalar* Cdata = C.data();
-
-        for (std::size_t p = 0; p < s; ++p)
-        {
-            const Scalar* Ap = Adata + 16*p;
-            const Scalar* Bp = Bdata + 16*p;
-            Scalar* Cp = Cdata + 16*p;
-
-            Cp[0]  = Ap[0]*Bp[0]  + Ap[1]*Bp[4]  + Ap[2]*Bp[8]  + Ap[3]*Bp[12];
-            Cp[1]  = Ap[0]*Bp[1]  + Ap[1]*Bp[5]  + Ap[2]*Bp[9]  + Ap[3]*Bp[13];
-            Cp[2]  = Ap[0]*Bp[2]  + Ap[1]*Bp[6]  + Ap[2]*Bp[10] + Ap[3]*Bp[14];
-            Cp[3]  = Ap[0]*Bp[3]  + Ap[1]*Bp[7]  + Ap[2]*Bp[11] + Ap[3]*Bp[15];
-
-            Cp[4]  = Ap[4]*Bp[0]  + Ap[5]*Bp[4]  + Ap[6]*Bp[8]  + Ap[7]*Bp[12];
-            Cp[5]  = Ap[4]*Bp[1]  + Ap[5]*Bp[5]  + Ap[6]*Bp[9]  + Ap[7]*Bp[13];
-            Cp[6]  = Ap[4]*Bp[2]  + Ap[5]*Bp[6]  + Ap[6]*Bp[10] + Ap[7]*Bp[14];
-            Cp[7]  = Ap[4]*Bp[3]  + Ap[5]*Bp[7]  + Ap[6]*Bp[11] + Ap[7]*Bp[15];
-
-            Cp[8]  = Ap[8]*Bp[0]  + Ap[9]*Bp[4]  + Ap[10]*Bp[8]  + Ap[11]*Bp[12];
-            Cp[9]  = Ap[8]*Bp[1]  + Ap[9]*Bp[5]  + Ap[10]*Bp[9]  + Ap[11]*Bp[13];
-            Cp[10] = Ap[8]*Bp[2]  + Ap[9]*Bp[6]  + Ap[10]*Bp[10] + Ap[11]*Bp[14];
-            Cp[11] = Ap[8]*Bp[3]  + Ap[9]*Bp[7]  + Ap[10]*Bp[11] + Ap[11]*Bp[15];
-
-            Cp[12] = Ap[12]*Bp[0] + Ap[13]*Bp[4] + Ap[14]*Bp[8]  + Ap[15]*Bp[12];
-            Cp[13] = Ap[12]*Bp[1] + Ap[13]*Bp[5] + Ap[14]*Bp[9]  + Ap[15]*Bp[13];
-            Cp[14] = Ap[12]*Bp[2] + Ap[13]*Bp[6] + Ap[14]*Bp[10] + Ap[15]*Bp[14];
-            Cp[15] = Ap[12]*Bp[3] + Ap[13]*Bp[7] + Ap[14]*Bp[11] + Ap[15]*Bp[15];
-        }
-    }
-};
-#endif //LVDREFERENCE_PARTIAL_LIKELIHOOD_TENSOR_H
-
-/*****************
- * Here is the reference version of the code, before it was unrooled by the AI
- **************/
-
-//
-// Created by David Bryant on 14/05/2026.
-//
-
-#ifdef LVDREFERENCE_PARTIAL_LIKELIHOOD_TENSOR_REFERENCE_H
-
-
-// tiny4_tensor.hpp
-#pragma once
-
-#include <vector>
-#include <cstddef>
-#include <cassert>
-#include <Eigen>
-
-#include "phylib.h"
-
-
-class PartialLikelihoodTensor
-{
-private:
-    std::vector<Scalar> data;
-    bool isClade;
-    bool multisite;
-    int nSites;
-public:
-    PartialLikelihoodTensor(bool _isClade, bool _multisite, int _nSites): isClade(_isClade), multisite(_multisite), nSites(_nSites)
-    {
-        if (isClade)
-        {
-            if (multisite)
-                data.resize(4 * nSites);
-            else
-                data.resize(4);
-        } else
-        {
-            if (multisite)
-                data.resize(16*nSites);
-            else
-                data.resize(16);
-        }
-    }
-
-    void fill(Eigen::Matrix<Scalar, 4, 1> mat)
-    {
-        assert(isClade);
-        if (multisite)
-        {
-            for (std::size_t s=0;s<nSites; s++)
-            {
-                for (std::size_t i=0;i<4;i++)
-                    data[s * 4 + i] = mat(i,0);
-            }
-        }
-        else
-        {
-            for (std::size_t i=0;i<4;i++)
-                data[i] = mat(i,0);
-        }
-    }
-
-    void fill(Eigen::Matrix<Scalar, 4, 4> mat)
-    {
-        assert(!isClade);
-        if (multisite)
-        {
-            for (std::size_t s=0;s<nSites; s++)
-            {
+            for (std::size_t p=0;p<size;p++)
                 for (std::size_t i=0;i<4;i++)
                     for (std::size_t j=0;j<4;j++)
-                        data[16*s + 4*i + j] = mat(i,j);
-            }
+                        data[16*p + 4*i + j] = vecsA.data[4*p + i] * matsB.data[16*p + 4*i + j];
+        }
+    }
+
+    /**
+     * Scale columns of matrix in position p of matsA with vector from position p of vecsB. Fill this tensor
+     * with the result. If matsA has size 1 then pretend like matsA is copies of the same matrix.
+     * then
+     * @param matsA
+     * @param vecsB
+     */
+    void scale_columns(const PartialLikelihoodTensor& matsA, const PartialLikelihoodTensor& vecsB)
+    {
+        assert(!isVectors && size == vecsB.size && !matsA.isVectors && vecsB.isVectors);
+        if (matsA.size==1)
+        {
+            for (std::size_t p=0;p<size;p++)
+                for (std::size_t i=0;i<4;i++)
+                    for (std::size_t j=0;j<4;j++)
+                        data[16*p + 4*i + j] = matsA.data[4*i + j] * vecsB.data[4*p + j];
         } else
         {
-            for (std::size_t i=0;i<4;i++)
-                for (std::size_t j=0;j<4;j++)
-                    data[4*i + j] = mat(i,j);
+            for (std::size_t p=0;p<size;p++)
+                for (std::size_t i=0;i<4;i++)
+                    for (std::size_t j=0;j<4;j++)
+                        data[16*p + 4*i + j] = matsA.data[16*p + 4*i + j] * vecsB.data[4*p + j];
         }
     }
 
-    friend void product(const PartialLikelihoodTensor& a, const PartialLikelihoodTensor& b, PartialLikelihoodTensor& c)
+    /**
+     * Multiply vector in each position of vecsB by the matrix in the same position of matsA. If matsA has size 1
+     * then we multiply each vector of vecsB by the same matrix
+     * @param matsA
+     * @param vecsB
+     */
+    void matrix_vector_product(const PartialLikelihoodTensor& matsA, const PartialLikelihoodTensor& vecsB)
     {
-        //If a is a clade then b has to be too. But either can be multisite.
-        if (a.isClade && !a.multisite) //a is a clade, same for all sites
+        assert(size==vecsB.size && isVectors && !matsA.isVectors && vecsB.isVectors);
+        if (matsA.size==1)
         {
-            assert(b.isClade);
-            if (!b.multisite) //b is a clade, same for all sites
-                vec_vec(a.data, b.data, c.data);
-            else  //b is a clade, different for all sites
-                vec_multivec(a.data, b.data, c.data);
-        }
-        if (a.isClade && !!a.multisite) //a is a clade, different for all sites
+            for (std::size_t p=0;p<size;p++)
+                for (std::size_t i=0;i<4;i++)
+                {
+                    Scalar sum = 0.0;
+                    for (std::size_t j=0;j<4;j++)
+                        sum+=matsA.data[4*i + j] * vecsB.data[4*p + j];
+                    data[4*p + i] = sum;
+                }
+        } else
         {
-            assert(b.isClade);
-            if (!b.multisite) //b is a clade, same for all sites
-                vec_multivec(b.data, a.data, c.data); //Note - entrywise multiplication commutes
-            else //b is a clade, different for all sites
-                multivec_multivec(a.data, b.data, c.data);
-        }
-
-        //If a is a matrix, then b can be a clade or a matrix. Either can be !multisite
-        if (!a.isClade && !a.multisite)
-        {
-            //a is a segment, same for all sites
-            if (b.isClade && !b.multisite) //b is a clade, same for all sites
-                mat_vec(a.data, b.data, c.data);
-            else if (b.isClade && !!b.multisite) //b is a clade, different for all sites
-                mat_multivec(a.data, b.data, c.data);
-            else if (!b.isClade && !b.multisite) //b is a segment, same for all sites
-                mat_mat(a.data, b.data, c.data);
-            else if (!b.isClade && !!b.multisite) //b is a segment, different for all sites
-                mat_multimat(a.data, b.data, c.data);
-        }
-
-        if (!a.isClade && !!a.multisite)
-        {
-            //a is a segment, different for all sites
-            if (b.isClade && !b.multisite) //b is a clade, same for all sites
-                multimat_vec(a.data, b.data, c.data);
-            else if (b.isClade && !!b.multisite) //b is a clade, different for all sites
-                multimat_multivec(a.data, b.data, c.data);
-            else if (!b.isClade && !b.multisite) //b is a segment, same for all sites
-                multimat_mat(a.data, b.data, c.data);
-            else if (!b.isClade && !!b.multisite) //b is a segment, different for all sites
-                multimat_multimat(a.data, b.data, c.data);
-        }
-    }
-
-private:
-    // ============================================================
-    //
-    // In the following:
-    //      A multivec is a 4xs matrix, each column being a vector
-    //      A multiMat is a 4x(4s) matrix, each 4 columns making up a 4x4 matrix
-    //
-    // ============================================================
-
-
-
-    // --------------------------------------------------------
-    // Vector-vector element-wise multiply
-    //
-    // Computes:
-    //
-    //   C[i]
-    //      = A[i] B[i]
-    //
-    // A size: 4
-    // B size: 4
-    // C size: 4
-    // --------------------------------------------------------
-    static inline void vec_vec(const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size()==4 && B.size()==4 && C.size()==4);
-        for (std::size_t i=0;i<4;i++)
-            C[i] = A[i]*B[i];
-    }
-
-    // --------------------------------------------------------
-    // Vector-multivector element-wise multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = A[i] B[p][i]
-    //
-    // A size: 4
-    // B size: 4*s
-    // C size: 4*s
-    // --------------------------------------------------------
-
-    static inline void vec_multivec(const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() == 4);
-        assert(B.size() % 4 == 0);
-        assert(C.size() == B.size());
-
-        const std::size_t s = B.size() / 4;
-
-        for (std::size_t p = 0; p < s; ++p)
-        {
-            for (std::size_t i=0;i<4;i++)
-                C[4*p + i] = A[i] * B[4*p + i];
-        }
-    }
-
-    // --------------------------------------------------------
-    // Multivector-multivector element-wise multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = A[i] B[p][i]
-    //
-    // A size: 4
-    // B size: 4*s
-    // C size: 4*s
-    // --------------------------------------------------------
-
-    static inline void multivec_multivec(const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() % 4 ==  0);
-        assert(B.size() == A.size());
-        assert(C.size() == B.size());
-
-        const std::size_t s = A.size() / 4;
-
-        for (std::size_t p = 0; p < s; ++p)
-        {
-            for (std::size_t i=0;i<4;i++)
-                C[4*p + i] = A[4*p+i] * B[4*p + i];
+            for (std::size_t p=0;p<size;p++)
+                for (std::size_t i=0;i<4;i++)
+                {
+                    Scalar sum = 0.0;
+                    for (std::size_t j=0;j<4;j++)
+                        sum+=matsA.data[16*p + 4*i + j] * vecsB.data[4*p + j];
+                    data[4*p + i] = sum;
+                }
         }
     }
 
 
-    // --------------------------------------------------------
-    // Matrix-vector multiply
-    //
-    // Computes:
-    //
-    //   C[i]
-    //      = sum_k A[i][k] B[k]
-    //
-    // A size: 16
-    // B size: 4
-    // C size: 4
-    // --------------------------------------------------------
-
-    static inline void mat_vec(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C
-    )
+    void matrix_matrix_product(const PartialLikelihoodTensor& matsA, const PartialLikelihoodTensor& matsB)
     {
-        assert(A.size() == 16 && B.size() == 4 && C.size() == 4);
-        for (std::size_t i=0;i<4;i++)
+        assert(size==std::max(matsA.size,matsB.size));
+        if (matsA.size == 1 && matsB.size > 1)
+        {
+            for (std::size_t p=0;p<size;p++)
+                for (std::size_t i=0;i<4;i++)
+                    for (std::size_t j=0;j<4;j++)
+                    {
+                        Scalar sum = 0.0;
+                        for (std::size_t k=0;k<4;k++)
+                            sum += matsA.data[4*i + k] * matsB.data[16*p+4*k + j];
+                        data[16*p + 4*i + j] = sum;
+                    }
+
+        } else if (matsA.size > 1 && matsB.size == 1)
+        {
+            for (std::size_t p=0;p<size;p++)
+                for (std::size_t i=0;i<4;i++)
+                    for (std::size_t j=0;j<4;j++)
+                    {
+                        Scalar sum = 0.0;
+                        for (std::size_t k=0;k<4;k++)
+                            sum += matsA.data[16*p + 4*i + k] * matsB.data[4*k + j];
+                        data[16*p + 4*i + j] = sum;
+                    }
+        } else //Arrays of matrices same length - multiple matrix in position p of matsA with matrix in position p of matsB
+        {
+            for (std::size_t p=0;p<size;p++)
+                for (std::size_t i=0;i<4;i++)
+                    for (std::size_t j=0;j<4;j++)
+                    {
+                        Scalar sum = 0.0;
+                        for (std::size_t k=0;k<4;k++)
+                            sum += matsA.data[16*p + 4*i + k] * matsB.data[16*p + 4*k + j];
+                        data[16*p + 4*i + j] = sum;
+                    }
+        }
+    }
+
+    Eigen::Matrix<Scalar, 1, Eigen::Dynamic> dot_product(const Eigen::Matrix<Scalar,4,1>& pi)
+    {
+        assert(isVectors);
+        Eigen::Matrix<Scalar, Eigen::Dynamic , 1> lvec(size,1);
+        for (std::size_t p=0;p<size;p++)
         {
             Scalar sum = 0.0;
-            for (std::size_t j=0;j<4;j++)
-                sum += A[4*i + j] * B[j];
-            C[i] = sum;
+            for (std::size_t i=0;i<4;i++)
+                sum += pi(i) * data[4*p + i];
+            lvec(p) = sum;
         }
     }
 
-    // --------------------------------------------------------
-    // Matrix-multivector multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = sum_k A[i][k] B[p][k]
-    //
-    // A size: 16
-    // B size: 4*s
-    // C size: 4*s
-    // --------------------------------------------------------
-
-
-    static inline void mat_multivec(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
+    Scalar max_coefficient(std::size_t p) const
     {
-        assert(A.size() == 16 && B.size() % 4 == 0 && C.size() == B.size());
-        const std::size_t s = B.size() / 4;
-        for (std::size_t p = 0; p < s; ++p)
+        assert(p < size);
+        Scalar max_val = 0.0; //Tensors non-negative
+        if (isVectors)
         {
             for (std::size_t i=0;i<4;i++)
-            {
-                Scalar sum = 0.0;
-                for (std::size_t j=0;j<4;j++)
-                    sum += A[4*i + j] * B[4*p + j];
-                C[4*p + i] = sum;
-            }
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // Matrix-matrix multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = sum_k A[i][k] B[p][k]
-    //
-    // A size: 16
-    // B size: 16
-    // C size: 16
-    // --------------------------------------------------------
-
-    static inline void mat_mat(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() == 16 && B.size() == 16 && C.size() == 16);
-        for (std::size_t i=0;i<4;i++) {
-            for (std::size_t j=0;j<4;j++) {
-                Scalar sum = 0.0;
-                for (std::size_t k=0;k<4;k++)
-                    sum += A[4*i + k] * B[4*k + j];
-                C[4*i + j] = sum;
-            }
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // Multimatrix-vector multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = sum_k A[p][i][k] B[k]
-    //
-    // A size: 16*s
-    // B size: 4
-    // C size: 4*s
-    // --------------------------------------------------------
-    static inline void multimat_vec(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() % 16 == 0 && B.size() == 4 && C.size() == A.size()/4);
-        const std::size_t s = A.size() / 16;
-        for (std::size_t p = 0; p < s; ++p)
-            for (std::size_t i=0;i<4;i++)
-            {
-                Scalar sum = 0.0;
-                for (std::size_t j=0;j<4;j++)
-                    sum += A[16*p + 4*i + j] * B[j];
-                C[4*p + i] = sum;
-            }
-    }
-
-
-
-    // --------------------------------------------------------
-    // Multimatrix-multivector multiply
-    //
-    // Computes:
-    //
-    //   C[p][i]
-    //      = sum_k A[p][i][k] B[p][k]
-    //
-    // A size: 16*s
-    // B size: 4*s
-    // C size: 4*s
-    // --------------------------------------------------------
-
-    static inline void multimat_multivec(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() % 16 == 0);
-
-        const std::size_t nSites = A.size() / 16;
-
-        assert(B.size() == 4 * nSites);
-        assert(C.size() == 4 * nSites);
-
-
-        for (std::size_t p = 0; p < nSites; ++p)
-        {
-            for (std::size_t i=0;i<4;i++)
-            {
-                Scalar sum = 0.0;
-                for (std::size_t k=0;k<4;k++)
-                    sum += A[16*p + 4*i + k] * B[4*p + k];
-                C[4*p + i] = sum;
-            }
-        }
-    }
-
-
-    // --------------------------------------------------------
-    // Matrix-multimatrix multiply
-    //
-    // Computes:
-    //
-    //   C[p][i][j]
-    //      = sum_k A[i][k] B[p][k][j]
-    //
-    // A size: 16
-    // B size: 16*s
-    // C size: 16*s
-    // --------------------------------------------------------
-
-    static inline void mat_multimat(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() == 16);
-        assert(B.size() % 16 == 0);
-        std::size_t s = B.size() / 16;
-        assert(C.size() == B.size());
-
-        for (std::size_t p = 0; p < s; ++p)
+                max_val = std::max(max_val,data[4*p + i]);
+        } else
         {
             for (std::size_t i=0;i<4;i++)
                 for (std::size_t j=0;j<4;j++)
-                {
-                    Scalar sum = 0.0;
-                    for (std::size_t k=0;k<4;k++)
-                        sum += A[4*i + k] * B[16*p + 4*k + j];
-                    C[16*p + 4*i + j] = sum;
-                }
+                    max_val = std::max(max_val,data[16*p + 4*i + j]);
+
         }
+        return max_val;
     }
 
-
-    // --------------------------------------------------------
-    // Multimatrix-matrix multiply
-    //
-    // Computes:
-    //
-    //   C[p][i][j]
-    //      = sum_k A[p][i][k] B[k][j]
-    //
-    // A size: 16*s
-    // B size: 16
-    // C size: 16*s
-    // --------------------------------------------------------
-    static inline void multimat_mat(
-    const std::vector<Scalar>& A,
-    const std::vector<Scalar>& B,
-    std::vector<Scalar>& C)
+    void rescale(std::size_t p, Scalar multiplier)
     {
-        assert(A.size() % 16 == 0);
-        assert(B.size() == 16);
-        assert(C.size() == A.size());
-
-        const std::size_t s = A.size() / 16;
-
-        for (std::size_t p = 0; p < s; ++p) {
-            const Scalar* Ap = A.data() + 16*p;
-            Scalar* Cp = C.data() + 16*p;
-
-            for (std::size_t i = 0; i < 4; ++i) {
-                for (std::size_t j = 0; j < 4; ++j) {
-                    Scalar sum = 0.0;
-                    for (std::size_t k = 0; k < 4; ++k) {
-                        sum += Ap[4*i + k] * B[4*k + j];
-                    }
-                    Cp[4*i + j] = sum;
-                }
-            }
-        }
-    }
-
-
-
-
-    // --------------------------------------------------------
-    // Multimatrix-multimatrix multiply
-    //
-    // Computes:
-    //
-    //   C[p][i][j]
-    //      = sum_k A[p][i][k] B[p][k][j]
-    //
-    // A size: 16*s
-    // B size: 16*s
-    // C size: 16*s
-    // --------------------------------------------------------
-
-    static inline void multimat_multimat(
-        const std::vector<Scalar>& A,
-        const std::vector<Scalar>& B,
-        std::vector<Scalar>& C)
-    {
-        assert(A.size() % 16 == 0);
-        assert(B.size() == A.size() && C.size() == A.size());
-
-        const std::size_t s = A.size() / 16;
-
-
-        for (std::size_t p = 0; p < s; ++p)
+        assert(p < size);
+        if (isVectors)
         {
             for (std::size_t i=0;i<4;i++)
-            {
+                data[4*p + i] *= multiplier;
+        } else
+        {
+            for (std::size_t i=0;i<4;i++)
                 for (std::size_t j=0;j<4;j++)
-                {
-                    Scalar sum = 0.0;
-                    for (std::size_t k=0;k<4;k++)
-                        sum += A[16*p + 4*i + k] * B[16*p + 4*k + j];
-                    C[16*p + 4*i + j] = sum;
-                }
-            }
+                    data[16*p + 4*i + j] *= multiplier;
         }
     }
 };
+
 #endif

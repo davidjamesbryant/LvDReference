@@ -490,16 +490,18 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
     const int nSites = static_cast<int>(patterns.size());
     patternL.resize(nSites);
 
-    // Allocate partial likelihood storage at every node based on isClade (outside timed region)
+    // Allocate partial likelihood storage at every node based on isVectors (outside timed region)
+    /*
     for (auto p = decomTree.leftmost_leaf(); !p.null(); p = p.next_post()) {
-        p->nSites = nSites;
-        if (p->isClade)
-            p->partialVec.resize(4, nSites);
+        p->size = size;
+        if (p->isVectors)
+            p->partialVec.resize(4, size);
         else
-            p->partialMat.resize(4, 4 * nSites);
-        p->exponents.resize(nSites);
+            p->partialMat.resize(4, 4 * size);
+        p->exponents.resize(size);
         p->exponents.setZero();
     }
+    */
 
     timer.start();
 
@@ -507,15 +509,15 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
 
         if (p.leaf() && p->isClade) {
             // Pendant edge: fill column s from the observed base for taxon p->id in pattern s
+            p->partialLikes.resize(true,nSites);
             Eigen::Matrix<Scalar, 4, 4> p_ij = model.transitionMatrix(p->length);
             for (int s = 0; s < nSites; s++) {
                 base b = patterns[s].first[p->id];
-                if (b < model.num_states()) {
-                    for (int i = 0; i < model.num_states(); i++)
-                        p->partialVec(i, s) = p_ij(i, b);
-                } else if (b == bX) {
-                    p->partialVec.col(s).fill(1.0);
-                } else {  // Ambiguous character
+                if (b < model.num_states())  //Single state
+                    p->partialLikes.set_column(s,p_ij.col(b));
+                else if (b == bX)  //Missing
+                    p->partialLikes.fill_column(s,1.0);
+                else {  // Ambiguous character
                     vector<Scalar> bases;
                     resolve_base(b, bases);
                     for (int i = 0; i < model.num_states(); i++) {
@@ -523,7 +525,7 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
                         for (int j = 0; j < model.num_states(); j++)
                             if (bases[j] == 1)
                                 pb += p_ij(i,j);
-                        p->partialVec(i, s) = pb;
+                        p->partialLikes.set(s,i,pb);
                     }
                 }
             }
@@ -531,9 +533,9 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
 
         } else if (p.leaf() && !p->isClade) {
             // Internal edge: transition matrix is site-independent, broadcast across all slices
+            p->partialLikes.resize(false,1); //Single matrix (all sites the same)
             Eigen::Matrix<Scalar, 4, 4> P = model.transitionMatrix(p->length);
-            for (int s = 0; s < nSites; s++)
-                p->partialMat.middleCols(4 * s, 4) = P;
+            p->partialLikes.set(P);
             p->exponents.setZero();
 
         } else {
@@ -541,33 +543,29 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
             auto r = l.right();
 
             switch (p->mergeType) {
-                case 1:
-                    // partialVec(:,s) = l.partialVec(:,s) .* r.partialVec(:,s) for all s at once
-                    p->partialVec = l->partialVec.cwiseProduct(r->partialVec);
+            case 1:
+                    p->partialLikes.resize(true,nSites);
+                    p->partialLikes.dot_times(l->partialLikes, r->partialLikes);
                     break;
-                case 2:
+            case 2:
                     // partialMat_s = diag(l.partialVec(:,s)) * r.partialMat_s
-                    for (int s = 0; s < nSites; s++)
-                        p->partialMat.middleCols(4 * s, 4) =
-                            l->partialVec.col(s).asDiagonal() * r->partialMat.middleCols(4 * s, 4);
+                    p->partialLikes.resize(false,nSites); //Array of matrices
+                    p->partialLikes.scale_rows(l->partialLikes, r->partialLikes);
                     break;
                 case 3:
                     // partialMat_s = l.partialMat_s * diag(r.partialVec(:,s))
-                    for (int s = 0; s < nSites; s++)
-                        p->partialMat.middleCols(4 * s, 4) =
-                            l->partialMat.middleCols(4 * s, 4) * r->partialVec.col(s).asDiagonal();
+                    p->partialLikes.resize(false,nSites); //Array of matrices
+                    p->partialLikes.scale_columns(l->partialLikes, r->partialLikes);
                     break;
                 case 4:
                     // partialVec(:,s) = l.partialMat_s * r.partialVec(:,s)
-                    for (int s = 0; s < nSites; s++)
-                        p->partialVec.col(s) =
-                            l->partialMat.middleCols(4 * s, 4) * r->partialVec.col(s);
+                    p->partialLikes.resize(true,nSites); //Array of vectors
+                    p->partialLikes.matrix_vector_product(l->partialLikes, r->partialLikes);
                     break;
                 case 5:
                     // partialMat_s = l.partialMat_s * r.partialMat_s
-                    for (int s = 0; s < nSites; s++)
-                        p->partialMat.middleCols(4 * s, 4).noalias() =
-                            l->partialMat.middleCols(4 * s, 4) * r->partialMat.middleCols(4 * s, 4);
+                    p->partialLikes.resize(false,nSites);
+                    p->partialLikes.matrix_matrix_product(l->partialLikes, r->partialLikes);
                     break;
                 default:
                     cerr << "Invalid merge index" << endl;
@@ -576,13 +574,9 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
             // Per-site underflow correction
             p->exponents = l->exponents + r->exponents;
             for (int s = 0; s < nSites; s++) {
-                Scalar maxval = p->isClade ? p->partialVec.col(s).maxCoeff()
-                                           : p->partialMat.middleCols(4 * s, 4).maxCoeff();
+                Scalar maxval = p->partialLikes.max_coefficient(s);
                 while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
-                    if (p->isClade)
-                        p->partialVec.col(s) *= UNDERFLOW_MULTIPLIER;
-                    else
-                        p->partialMat.middleCols(4 * s, 4) *= UNDERFLOW_MULTIPLIER;
+                    p->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
                     maxval *= UNDERFLOW_MULTIPLIER;
                     p->exponents(s) -= static_cast<int>(UNDERFLOW_STEP);
                 }
@@ -590,21 +584,15 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
         }
     }
 
-    // pi^T * root.partialVec gives a 1 x nSites row vector
-    Eigen::Matrix<Scalar, 4, 1> pi_vec;
-    for (int i = 0; i < model.num_states(); i++)
-        pi_vec(i) = model.pi(i);
-
-    Eigen::Matrix<Scalar, 1, Eigen::Dynamic> Ls =
-        pi_vec.transpose() * decomTree.root()->partialVec;
-
+    Eigen::Matrix<Scalar, 4, 1> pi_vec = model.get_pi();
+    Eigen::Matrix<Scalar, Eigen::Dynamic, 1> Ls = decomTree.root()->partialLikes.dot_product(pi_vec);
     Scalar logL = 0.0;
     for (int s = 0; s < nSites; s++) {
         patternL[s] = log(Ls(s)) + decomTree.root()->exponents(s);
         logL += patternL[s] * patterns[s].second;
     }
-
     timer.stop();
+
     return logL;
 }
 
@@ -625,12 +613,11 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
         Eigen::Matrix<Scalar, 4, 4> P = model.transitionMatrix(p->length);
         for (int s = 0; s < nSites; s++) {
             base b = patterns[s].first[p->id];
-            if (b < nstates) {
-                for (int i = 0; i < nstates; i++)
-                    p->partialVec(i, s) = P(i, b);
-            } else if (b == bX) {
-                p->partialVec.col(s).fill(1.0);
-            } else {
+            if (b < nstates)
+                p->partialLikes.set_column(s,P.col(b));
+            else if (b == bX)
+                p->partialLikes.fill_column(s,1.0);
+            else { //Ambiguous character
                 vector<Scalar> bases;
                 resolve_base(b, bases);
                 for (int i = 0; i < nstates; i++) {
@@ -638,7 +625,7 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
                     for (int j = 0; j < nstates; j++)
                         if (bases[j] == 1)
                             pb += P(i, j);
-                    p->partialVec(i, s) = pb;
+                    p->partialLikes.set(s,i,pb);
                 }
             }
         }
@@ -646,8 +633,7 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
     } else {
         // Internal edge: partialMat is the same transition matrix broadcast across all slices
         Eigen::Matrix<Scalar, 4, 4> P = model.transitionMatrix(p->length);
-        for (int s = 0; s < nSites; s++)
-            p->partialMat.middleCols(4 * s, 4) = P;
+        p->partialLikes.set(P);
         p->exponents.setZero();
     }
 
@@ -658,64 +644,45 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
         auto r = l.right();
 
         switch (q->mergeType) {
-            case 1:
-                q->partialVec = l->partialVec.cwiseProduct(r->partialVec);
-                break;
-            case 2:
-                for (int s = 0; s < nSites; s++)
-                    q->partialMat.middleCols(4 * s, 4) =
-                        l->partialVec.col(s).asDiagonal() * r->partialMat.middleCols(4 * s, 4);
-                break;
-            case 3:
-                for (int s = 0; s < nSites; s++)
-                    q->partialMat.middleCols(4 * s, 4) =
-                        l->partialMat.middleCols(4 * s, 4) * r->partialVec.col(s).asDiagonal();
-                break;
-            case 4:
-                // When l is a decomp-tree leaf its partialMat holds the same
-                // 4×4 transition matrix in every slice, so collapse to one GEMM.
-                if (l.leaf())
-                    q->partialVec.noalias() = l->partialMat.leftCols(4) * r->partialVec;
-                else
-                    for (int s = 0; s < nSites; s++)
-                        q->partialVec.col(s).noalias() =
-                            l->partialMat.middleCols(4 * s, 4) * r->partialVec.col(s);
-                break;
-            case 5:
-                for (int s = 0; s < nSites; s++)
-                    q->partialMat.middleCols(4 * s, 4).noalias() =
-                        l->partialMat.middleCols(4 * s, 4) * r->partialMat.middleCols(4 * s, 4);
-                break;
-            default:
-                cerr << "Invalid merge index" << endl;
+        case 1:
+            q->partialLikes.dot_times(l->partialLikes, r->partialLikes);
+            break;
+        case 2:
+            // partialMat_s = diag(l.partialVec(:,s)) * r.partialMat_s
+            q->partialLikes.scale_rows(l->partialLikes, r->partialLikes);
+            break;
+        case 3:
+            // partialMat_s = l.partialMat_s * diag(r.partialVec(:,s))
+            q->partialLikes.scale_columns(l->partialLikes, r->partialLikes);
+            break;
+        case 4:
+            // partialVec(:,s) = l.partialMat_s * r.partialVec(:,s)
+            q->partialLikes.matrix_vector_product(l->partialLikes, r->partialLikes);
+            break;
+        case 5:
+            // partialMat_s = l.partialMat_s * r.partialMat_s
+            q->partialLikes.matrix_matrix_product(l->partialLikes, r->partialLikes);
+            break;
+        default:
+            cerr << "Invalid merge index" << endl;
         }
 
         // Per-site underflow correction
-        q->exponents = l->exponents + r->exponents;
+        p->exponents = l->exponents + r->exponents;
         for (int s = 0; s < nSites; s++) {
-            Scalar maxval = q->isClade ? q->partialVec.col(s).maxCoeff()
-                                       : q->partialMat.middleCols(4 * s, 4).maxCoeff();
+            Scalar maxval = p->partialLikes.max_coefficient(s);
             while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
-                if (q->isClade)
-                    q->partialVec.col(s) *= UNDERFLOW_MULTIPLIER;
-                else
-                    q->partialMat.middleCols(4 * s, 4) *= UNDERFLOW_MULTIPLIER;
+                p->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
                 maxval *= UNDERFLOW_MULTIPLIER;
-                q->exponents(s) -= static_cast<int>(UNDERFLOW_STEP);
+                p->exponents(s) -= static_cast<int>(UNDERFLOW_STEP);
             }
         }
-
         q = q.par();
     }
 
     // Compute log-likelihood from updated root partial
-    Eigen::Matrix<Scalar, 4, 1> pi_vec;
-    for (int i = 0; i < nstates; i++)
-        pi_vec(i) = model.pi(i);
-
-    Eigen::Matrix<Scalar, 1, Eigen::Dynamic> Ls =
-        pi_vec.transpose() * decomTree.root()->partialVec;
-
+    Eigen::Matrix<Scalar, 4, 1> pi_vec = model.get_pi();
+    Eigen::Matrix<Scalar, Eigen::Dynamic, 1> Ls = decomTree.root()->partialLikes.dot_product(pi_vec);
     Scalar logL = 0.0;
     for (int s = 0; s < nSites; s++) {
         patternL[s] = log(Ls(s)) + decomTree.root()->exponents(s);
