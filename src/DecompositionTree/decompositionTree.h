@@ -61,7 +61,7 @@ public:
     bool external;
     bool isClade;
     bool isDirty;
-
+    int mergeType;
     int nSites;
     PartialLikelihoodTensorReference partialLikes;
 
@@ -69,22 +69,21 @@ public:
 //    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialMat;  // 4 x (4*size)    (segments only)
     Eigen::VectorXi exponents;                             // one per site
 
-    int mergeType;
 
     // Default constructor: does not allocate partial likelihood storage.
-    //DecomNodeDataAllSites() : basic_newick(), external(false), isVectors(false),
-     //                         isDirty(false), size(0), mergeType(0) {}
+    DecomNodeDataAllSites() : basic_newick(), external(false), isClade(false),
+                              isDirty(false), nSites(0), mergeType(0) {}
 
     // Conversion constructor from DecomNodeData: copies topology fields, leaves partials unallocated.
     // Required by Phylib::copy<DecomNodeData, DecomNodeDataAllSites>.
-    // DecomNodeDataAllSites(const DecomNodeData& d)
-    //     : basic_newick(static_cast<const basic_newick&>(d)),
-    //       external(d.external), isVectors(d.isVectors),
-    //       isDirty(false), size(0), mergeType(d.mergeType) {}
+     DecomNodeDataAllSites(const DecomNodeData& d)
+         : basic_newick(static_cast<const basic_newick&>(d)),
+           external(d.external), isClade(d.isClade),
+           isDirty(d.isDirty), nSites(0), mergeType(d.mergeType) {}
 
-    // Allocating constructor: allocates partialVec (clade nodes) or partialMat (segment nodes).
-    DecomNodeDataAllSites(bool isClade_, int nSites_, bool external_) : external(external_), isClade(isClade_),
-          isDirty(false), nSites(nSites_), mergeType(0) {
+    // Copy constructor: allocates new partial Likelihoods
+    DecomNodeDataAllSites(const DecomNodeDataAllSites& d) : external(d.external), isClade(d.isClade),
+          isDirty(d.isDirty), nSites(d.nSites), mergeType(d.mergeType), partialLikes(d.partialLikes) {
 
         exponents.resize(nSites);
         exponents.setZero();

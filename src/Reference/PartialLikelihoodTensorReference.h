@@ -27,6 +27,12 @@ private:
 public:
     PartialLikelihoodTensorReference() : isVectors(false), size(0) {}  //Default constructor - no allocation
 
+    PartialLikelihoodTensorReference(const PartialLikelihoodTensorReference& x) : isVectors(x.isVectors), size(x.size)
+    {
+        resize(isVectors,size);
+        copy(x.data.begin(), x.data.end(), data.begin());
+    }
+
     PartialLikelihoodTensorReference(bool isVectors_, std::size_t size): isVectors(isVectors_), size(size)
     {
         if (isVectors)

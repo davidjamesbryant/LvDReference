@@ -529,6 +529,7 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
                     }
                 }
             }
+            p->exponents.resize(nSites,1);
             p->exponents.setZero();
 
         } else if (p.leaf() && !p->isClade) {
@@ -536,6 +537,7 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
             p->partialLikes.resize(false,1); //Single matrix (all sites the same)
             Eigen::Matrix<Scalar, 4, 4> P = model.transitionMatrix(p->length);
             p->partialLikes.set(P);
+            p->exponents.resize(nSites,1);
             p->exponents.setZero();
 
         } else {
@@ -668,13 +670,13 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
         }
 
         // Per-site underflow correction
-        p->exponents = l->exponents + r->exponents;
+        q->exponents = l->exponents + r->exponents;
         for (int s = 0; s < nSites; s++) {
-            Scalar maxval = p->partialLikes.max_coefficient(s);
+            Scalar maxval = q->partialLikes.max_coefficient(s);
             while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
-                p->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
+                q->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
                 maxval *= UNDERFLOW_MULTIPLIER;
-                p->exponents(s) -= static_cast<int>(UNDERFLOW_STEP);
+                q->exponents(s) -= static_cast<int>(UNDERFLOW_STEP);
             }
         }
         q = q.par();
