@@ -241,16 +241,17 @@ static MCMCResults runStandardMCMC(
     results.numBranches    = numBranches;
 
     for (int iter = 0; iter < options.num_iterations; ++iter) {
-        auto iterStart = chrono::steady_clock::now();
-
         int    branchIdx = (int)random_num((unsigned int)numBranches);
         auto   p         = branches[branchIdx];
         double oldLen    = p->length;
         double newLen    = oldLen + randu(-options.proposal_width, options.proposal_width);
 
         bool accept = false;
+        double likeTime = 0.0;
         if (newLen > 0.0) {
+            auto t0 = chrono::steady_clock::now();
             Scalar newLogLik   = updateBranchLength(t, model, patterns, p, newLen);
+            likeTime += chrono::duration<double>(chrono::steady_clock::now() - t0).count();
 
             // Prior ratio for exponential: log p(new) - log p(old) = -rate*(new - old)
             Scalar newLogPrior = logPrior + options.prior_rate * (oldLen - newLen);
@@ -264,7 +265,9 @@ static MCMCResults runStandardMCMC(
                 logPrior = newLogPrior;
                 logPost  = newLogPost;
             } else {
+                auto t1 = chrono::steady_clock::now();
                 updateBranchLength(t, model, patterns, p, oldLen);  // restore
+                likeTime += chrono::duration<double>(chrono::steady_clock::now() - t1).count();
             }
         } else {
             results.numNegative++;
@@ -272,10 +275,8 @@ static MCMCResults runStandardMCMC(
 
         if (accept) results.numAccepted++;
 
-        double iterSecs = chrono::duration<double>(chrono::steady_clock::now() - iterStart).count();
-
         results.logPosterior.push_back(logPost);
-        results.iterTime.push_back(iterSecs);
+        results.iterTime.push_back(likeTime);
         results.branch.push_back(branchIdx);
         results.old_length.push_back(oldLen);
         results.new_length.push_back(newLen);
@@ -336,16 +337,17 @@ static MCMCResults runDecomMCMC(
     results.numBranches    = numBranches;
 
     for (int iter = 0; iter < options.num_iterations; ++iter) {
-        auto iterStart = chrono::steady_clock::now();
-
         int    branchIdx = (int)random_num((unsigned int)numBranches);
         auto   p         = branches[branchIdx];
         double oldLen    = p->length;
         double newLen    = oldLen + randu(-options.proposal_width, options.proposal_width);
 
         bool accept = false;
+        double likeTime = 0.0;
         if (newLen > 0.0) {
+            auto t0 = chrono::steady_clock::now();
             Scalar newLogLik   = updateBranchLength(t, model, patterns, patternL, p, newLen);
+            likeTime += chrono::duration<double>(chrono::steady_clock::now() - t0).count();
 
             Scalar newLogPrior = logPrior + options.prior_rate * (oldLen - newLen);
             Scalar newLogPost  = newLogLik + newLogPrior;
@@ -357,7 +359,9 @@ static MCMCResults runDecomMCMC(
                 logPrior = newLogPrior;
                 logPost  = newLogPost;
             } else {
+                auto t1 = chrono::steady_clock::now();
                 updateBranchLength(t, model, patterns, patternL, p, oldLen);  // restore
+                likeTime += chrono::duration<double>(chrono::steady_clock::now() - t1).count();
             }
         } else {
             results.numNegative++;
@@ -365,10 +369,8 @@ static MCMCResults runDecomMCMC(
 
         if (accept) results.numAccepted++;
 
-        double iterSecs = chrono::duration<double>(chrono::steady_clock::now() - iterStart).count();
-
         results.logPosterior.push_back(logPost);
-        results.iterTime.push_back(iterSecs);
+        results.iterTime.push_back(likeTime);
         results.branch.push_back(branchIdx);
         results.old_length.push_back(oldLen);
         results.new_length.push_back(newLen);
