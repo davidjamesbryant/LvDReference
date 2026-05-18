@@ -12,7 +12,7 @@
 #include <Eigen>
 #include "phylib.h"
 #include "../StandardLikelihood/standardLikelihood.h"
-#include "PartialLikelihoodTensor.h"
+#include "../Reference/PartialLikelihoodTensorReference.h"
 
 using namespace Phylib;
 
@@ -63,7 +63,7 @@ public:
     bool isDirty;
 
     int nSites;
-    PartialLikelihoodTensor partialLikes;
+    PartialLikelihoodTensorReference partialLikes;
 
 //    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialVec;  // 4 x size        (clades only)
 //    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialMat;  // 4 x (4*size)    (segments only)
