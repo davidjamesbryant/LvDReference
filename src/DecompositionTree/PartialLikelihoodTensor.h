@@ -12,6 +12,14 @@
 //       in every inner-loop iteration.
 //   (3) Inner loops of size 4 are unrolled in the computational kernels.
 //       Simple setters/accessors are left as loops — the compiler handles those.
+//   (4) __attribute__((always_inline)) on all hot kernels: the bodies are too large
+//       for the compiler's default inlining threshold at -O3, so they would otherwise
+//       appear as separate call frames (confirmed by sample profiling).  Forcing
+//       inlining removes call overhead and allows the compiler to fuse the arithmetic
+//       with surrounding code in decompositionLikelihood.cpp.
+//   (5) __restrict__ on raw pointer locals: asserts that the three data arrays
+//       (this, matsA, matsB/vecsB) never alias, enabling auto-vectorisation of the
+//       outer site-loop.
 
 #ifndef LVDREFERENCE_PARTIAL_LIKELIHOOD_TENSOR_H
 #define LVDREFERENCE_PARTIAL_LIKELIHOOD_TENSOR_H
@@ -109,14 +117,15 @@ public:
     /**
      * this[p][i] = vecsA[p][i] * vecsB[p][i]  (elementwise product)
      */
+    __attribute__((always_inline))
     void dot_times(const PartialLikelihoodTensor& vecsA, const PartialLikelihoodTensor& vecsB)
     {
         assert(size == vecsA.size && size == vecsB.size);
         assert(isVectors && vecsA.isVectors && vecsB.isVectors);
 
-              Scalar* Cdata = data.data();
-        const Scalar* Adata = vecsA.data.data();
-        const Scalar* Bdata = vecsB.data.data();
+              Scalar* __restrict__ Cdata = data.data();
+        const Scalar* __restrict__ Adata = vecsA.data.data();
+        const Scalar* __restrict__ Bdata = vecsB.data.data();
 
         for (std::size_t p = 0; p < size; p++)
         {
@@ -134,13 +143,14 @@ public:
      * this[p][i][j] = vecsA[p][i] * matsB[p][i][j]
      * If matsB.size == 1, the same matrix is used for all p.
      */
+    __attribute__((always_inline))
     void scale_rows(const PartialLikelihoodTensor& vecsA, const PartialLikelihoodTensor& matsB)
     {
         assert(!isVectors && size == vecsA.size && vecsA.isVectors && !matsB.isVectors);
 
-              Scalar* Cdata = data.data();
-        const Scalar* Adata = vecsA.data.data();
-        const Scalar* Bdata = matsB.data.data();
+              Scalar* __restrict__ Cdata = data.data();
+        const Scalar* __restrict__ Adata = vecsA.data.data();
+        const Scalar* __restrict__ Bdata = matsB.data.data();
 
         if (matsB.size == 1)
         {
@@ -174,13 +184,14 @@ public:
      * this[p][i][j] = matsA[p][i][j] * vecsB[p][j]
      * If matsA.size == 1, the same matrix is used for all p.
      */
+    __attribute__((always_inline))
     void scale_columns(const PartialLikelihoodTensor& matsA, const PartialLikelihoodTensor& vecsB)
     {
         assert(!isVectors && size == vecsB.size && !matsA.isVectors && vecsB.isVectors);
 
-              Scalar* Cdata = data.data();
-        const Scalar* Adata = matsA.data.data();
-        const Scalar* Bdata = vecsB.data.data();
+              Scalar* __restrict__ Cdata = data.data();
+        const Scalar* __restrict__ Adata = matsA.data.data();
+        const Scalar* __restrict__ Bdata = vecsB.data.data();
 
         if (matsA.size == 1)
         {
@@ -214,13 +225,14 @@ public:
      * this[p] = matsA[p] * vecsB[p]  (matrix-vector product per site)
      * If matsA.size == 1, the same matrix is applied to every site.
      */
+    __attribute__((always_inline))
     void matrix_vector_product(const PartialLikelihoodTensor& matsA, const PartialLikelihoodTensor& vecsB)
     {
         assert(size == vecsB.size && isVectors && !matsA.isVectors && vecsB.isVectors);
 
-              Scalar* Cdata = data.data();
-        const Scalar* Adata = matsA.data.data();
-        const Scalar* Bdata = vecsB.data.data();
+              Scalar* __restrict__ Cdata = data.data();
+        const Scalar* __restrict__ Adata = matsA.data.data();
+        const Scalar* __restrict__ Bdata = vecsB.data.data();
 
         if (matsA.size == 1)
         {
@@ -254,11 +266,12 @@ public:
      * this[p] = matsA[p] * matsB[p]  (matrix-matrix product per site)
      * Either input may have size 1, in which case that matrix is broadcast.
      */
+    __attribute__((always_inline))
     void matrix_matrix_product(const PartialLikelihoodTensor& matsA, const PartialLikelihoodTensor& matsB)
     {
-              Scalar* Cdata = data.data();
-        const Scalar* Adata = matsA.data.data();
-        const Scalar* Bdata = matsB.data.data();
+              Scalar* __restrict__ Cdata = data.data();
+        const Scalar* __restrict__ Adata = matsA.data.data();
+        const Scalar* __restrict__ Bdata = matsB.data.data();
 
         if (matsA.size == 1 && matsB.size > 1)
         {
@@ -341,11 +354,12 @@ public:
     /**
      * Returns a vector of length size where entry p = pi^T * column[p].
      */
+    __attribute__((always_inline))
     Eigen::Matrix<Scalar, Eigen::Dynamic, 1> dot_product(const Eigen::Matrix<Scalar,4,1>& pi)
     {
         assert(isVectors);
         Eigen::Matrix<Scalar, Eigen::Dynamic, 1> lvec(size, 1);
-        const Scalar* Ddata = data.data();
+        const Scalar* __restrict__ Ddata = data.data();
         const Scalar pi0 = pi(0), pi1 = pi(1), pi2 = pi(2), pi3 = pi(3);
         for (std::size_t p = 0; p < size; p++)
         {
