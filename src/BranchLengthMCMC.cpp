@@ -307,6 +307,7 @@ static MCMCResults runDecomMCMC(
     copy(decomBase, t);
 
     cerr<<"Height of decomposition tree = "<<nodeHeight<DecomNodeData>(decomBase.root())<<endl;
+    cerr<<"Average height of decomposition tree = "<<averageNodeHeight<DecomNodeData>(decomBase.root())<<endl;
 
     Stopwatch sw;
     vector<double> patternL;
