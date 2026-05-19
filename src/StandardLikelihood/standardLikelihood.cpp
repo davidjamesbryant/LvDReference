@@ -255,6 +255,8 @@ Scalar updateBranchLength(phylo<NodeDataAllSites>& tree, const SubstModel& model
     // Recompute partials at every ancestor. A node's partials depend on its
     // children's lengths (used to build transition matrices), so the first node
     // affected by the changed length is p's parent.
+    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> tmp1(4, nPatterns), tmp2(4, nPatterns);
+
     auto q = p.par();
     while (q != tree.header()) {
         auto c1 = q.left();
@@ -262,7 +264,9 @@ Scalar updateBranchLength(phylo<NodeDataAllSites>& tree, const SubstModel& model
 
         Eigen::Matrix<Scalar, 4, 4> P1 = model.transitionMatrix(c1->length);
         Eigen::Matrix<Scalar, 4, 4> P2 = model.transitionMatrix(c2->length);
-        q->partials = (P1 * c1->partials).cwiseProduct(P2 * c2->partials);
+        tmp1.noalias() = P1 * c1->partials;
+        tmp2.noalias() = P2 * c2->partials;
+        q->partials = tmp1.cwiseProduct(tmp2);
 
         q->exponents = c1->exponents + c2->exponents;
         for (int s = 0; s < nPatterns; s++) {
