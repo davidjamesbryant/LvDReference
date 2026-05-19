@@ -202,7 +202,7 @@ Scalar computeLikelihood(phylo<NodeDataAllSites>& tree, const SubstModel& model,
                 for (int i = 0; i < nstates; i++)
                     p->partials(i, s) = col[i];
             }
-            p->exponents.setZero();
+            p->log_scale.setZero();
         } else {
             ITERATOR c1 = p.left();
             ITERATOR c2 = c1.right();
@@ -215,13 +215,13 @@ Scalar computeLikelihood(phylo<NodeDataAllSites>& tree, const SubstModel& model,
             p->partials = (P1 * c1->partials).cwiseProduct(P2 * c2->partials);
 
             // Per-column underflow correction (mirrors the scalar loop in computeLikelihood(nodeData))
-            p->exponents = c1->exponents + c2->exponents;
+            p->log_scale = c1->log_scale + c2->log_scale;
             for (int s = 0; s < nPatterns; s++) {
                 Scalar maxval = p->partials.col(s).maxCoeff();
                 while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
                     p->partials.col(s) *= UNDERFLOW_MULTIPLIER;
-                    maxval              *= UNDERFLOW_MULTIPLIER;
-                    p->exponents(s)    -= static_cast<int>(UNDERFLOW_STEP);
+                    maxval             *= UNDERFLOW_MULTIPLIER;
+                    p->log_scale(s)    -= static_cast<int>(UNDERFLOW_STEP);
                 }
             }
         }
@@ -237,7 +237,7 @@ Scalar computeLikelihood(phylo<NodeDataAllSites>& tree, const SubstModel& model,
 
     Scalar logL = 0.0;
     for (int s = 0; s < nPatterns; s++)
-        logL += (log(Ls(s)) + tree.root()->exponents(s)) * patterns[s].second;
+        logL += (log(Ls(s)) + tree.root()->log_scale(s)) * patterns[s].second;
 
     timer.stop();
     return logL;
@@ -268,13 +268,13 @@ Scalar updateBranchLength(phylo<NodeDataAllSites>& tree, const SubstModel& model
         tmp2.noalias() = P2 * c2->partials;
         q->partials = tmp1.cwiseProduct(tmp2);
 
-        q->exponents = c1->exponents + c2->exponents;
+        q->log_scale = c1->log_scale + c2->log_scale;
         for (int s = 0; s < nPatterns; s++) {
             Scalar maxval = q->partials.col(s).maxCoeff();
             while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
                 q->partials.col(s) *= UNDERFLOW_MULTIPLIER;
-                maxval              *= UNDERFLOW_MULTIPLIER;
-                q->exponents(s)    -= static_cast<int>(UNDERFLOW_STEP);
+                maxval             *= UNDERFLOW_MULTIPLIER;
+                q->log_scale(s)    -= static_cast<int>(UNDERFLOW_STEP);
             }
         }
 
@@ -291,7 +291,7 @@ Scalar updateBranchLength(phylo<NodeDataAllSites>& tree, const SubstModel& model
 
     Scalar logL = 0.0;
     for (int s = 0; s < nPatterns; s++)
-        logL += (log(Ls(s)) + tree.root()->exponents(s)) * patterns[s].second;
+        logL += (log(Ls(s)) + tree.root()->log_scale(s)) * patterns[s].second;
 
     return logL;
 }

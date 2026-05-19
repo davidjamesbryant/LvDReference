@@ -206,13 +206,13 @@ public:
         nPatterns = n;
         partials.resize(4, n);
         partials.setZero();
-        exponents.resize(n);
-        exponents.setZero();
+        log_scale.resize(n);
+        log_scale.setZero();
     }
 
     int nPatterns;
     Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partials;
-    Eigen::VectorXi exponents;
+    Eigen::VectorXi log_scale;
     bool isDirty;
 };
 

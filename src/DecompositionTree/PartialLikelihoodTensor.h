@@ -414,6 +414,53 @@ public:
                 Dp[k] *= multiplier;
         }
     }
+
+    /**
+     * For each site p, scales all entries so the maximum is in [0.5, 1) and
+     * accumulates the binary exponent into log_scale(p).  Called unconditionally
+     * after every merge; multiply log_scale * LN2 once at the root to get the
+     * natural-log correction.
+     */
+    __attribute__((always_inline))
+    void normalize(Eigen::VectorXi& log_scale)
+    {
+        Scalar* __restrict__ Ddata = data.data();
+        if (isVectors)
+        {
+            for (std::size_t p = 0; p < size; p++)
+            {
+                Scalar* Dp = Ddata + 4*p;
+                Scalar max_val = std::max(std::max(Dp[0], Dp[1]), std::max(Dp[2], Dp[3]));
+                if (max_val > 0)
+                {
+                    int exp;
+                    std::frexp(max_val, &exp);
+                    Scalar scale = std::ldexp(Scalar(1.0), -exp);
+                    Dp[0] *= scale;  Dp[1] *= scale;  Dp[2] *= scale;  Dp[3] *= scale;
+                    log_scale(p) += exp;
+                }
+            }
+        }
+        else
+        {
+            for (std::size_t p = 0; p < size; p++)
+            {
+                Scalar* Dp = Ddata + 16*p;
+                Scalar max_val = Dp[0];
+                for (std::size_t k = 1; k < 16; k++)
+                    max_val = std::max(max_val, Dp[k]);
+                if (max_val > 0)
+                {
+                    int exp;
+                    std::frexp(max_val, &exp);
+                    Scalar scale = std::ldexp(Scalar(1.0), -exp);
+                    for (std::size_t k = 0; k < 16; k++)
+                        Dp[k] *= scale;
+                    log_scale(p) += exp;
+                }
+            }
+        }
+    }
 };
 
 #endif // USE_REFERENCE_TENSOR_CALCULATIONS

@@ -67,7 +67,7 @@ public:
 
 //    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialVec;  // 4 x size        (clades only)
 //    Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partialMat;  // 4 x (4*size)    (segments only)
-    Eigen::VectorXi exponents;                             // one per site
+    Eigen::VectorXi log_scale;                             // one per site, accumulated underflow correction in natural-log units
 
 
     // Default constructor: does not allocate partial likelihood storage.
@@ -85,8 +85,8 @@ public:
     DecomNodeDataAllSites(const DecomNodeDataAllSites& d) : external(d.external), isClade(d.isClade),
           isDirty(d.isDirty), nSites(d.nSites), mergeType(d.mergeType), partialLikes(d.partialLikes) {
 
-        exponents.resize(nSites);
-        exponents.setZero();
+        log_scale.resize(nSites);
+        log_scale.setZero();
     }
 };
 

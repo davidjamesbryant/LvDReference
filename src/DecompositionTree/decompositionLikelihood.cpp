@@ -529,16 +529,16 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
                     }
                 }
             }
-            p->exponents.resize(nSites,1);
-            p->exponents.setZero();
+            p->log_scale.resize(nSites);
+            p->log_scale.setZero();
 
         } else if (p.leaf() && !p->isClade) {
             // Internal edge: transition matrix is site-independent, broadcast across all slices
             p->partialLikes.resize(false,1); //Single matrix (all sites the same)
             Eigen::Matrix<Scalar, 4, 4> P = model.transitionMatrix(p->length);
             p->partialLikes.set(P);
-            p->exponents.resize(nSites,1);
-            p->exponents.setZero();
+            p->log_scale.resize(nSites);
+            p->log_scale.setZero();
 
         } else {
             auto l = p.left();
@@ -573,14 +573,18 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
                     cerr << "Invalid merge index" << endl;
             }
 
-            // Per-site underflow correction
-            p->exponents = l->exponents + r->exponents;
-            for (int s = 0; s < nSites; s++) {
-                Scalar maxval = p->partialLikes.max_coefficient(s);
-                while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
-                    p->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
-                    maxval *= UNDERFLOW_MULTIPLIER;
-                    p->exponents(s) -= static_cast<int>(UNDERFLOW_STEP);
+            // Per-site underflow correction; skipped when a child is a decomp-tree leaf
+            // (leaf partials are fresh transition-matrix values in [0,1], so their product
+            // with any corrected internal partial cannot underflow below UNDERFLOW_CUTOFF).
+            p->log_scale = l->log_scale + r->log_scale;
+            if (!l.leaf() && !r.leaf()) {
+                for (int s = 0; s < nSites; s++) {
+                    Scalar maxval = p->partialLikes.max_coefficient(s);
+                    while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
+                        p->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
+                        maxval *= UNDERFLOW_MULTIPLIER;
+                        p->log_scale(s) -= static_cast<int>(UNDERFLOW_STEP);
+                    }
                 }
             }
         }
@@ -590,7 +594,7 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
     Eigen::Matrix<Scalar, Eigen::Dynamic, 1> Ls = decomTree.root()->partialLikes.dot_product(pi_vec);
     Scalar logL = 0.0;
     for (int s = 0; s < nSites; s++) {
-        patternL[s] = log(Ls(s)) + decomTree.root()->exponents(s);
+        patternL[s] = log(Ls(s)) + decomTree.root()->log_scale(s);
         logL += patternL[s] * patterns[s].second;
     }
     timer.stop();
@@ -631,12 +635,12 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
                 }
             }
         }
-        p->exponents.setZero();
+        p->log_scale.setZero();
     } else {
         // Internal edge: partialMat is the same transition matrix broadcast across all slices
         Eigen::Matrix<Scalar, 4, 4> P = model.transitionMatrix(p->length);
         p->partialLikes.set(P);
-        p->exponents.setZero();
+        p->log_scale.setZero();
     }
 
     // Walk from p's parent to the root, reapplying merge rules at each ancestor
@@ -669,14 +673,16 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
             cerr << "Invalid merge index" << endl;
         }
 
-        // Per-site underflow correction
-        q->exponents = l->exponents + r->exponents;
-        for (int s = 0; s < nSites; s++) {
-            Scalar maxval = q->partialLikes.max_coefficient(s);
-            while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
-                q->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
-                maxval *= UNDERFLOW_MULTIPLIER;
-                q->exponents(s) -= static_cast<int>(UNDERFLOW_STEP);
+        // Per-site underflow correction; skipped when a child is a decomp-tree leaf.
+        q->log_scale = l->log_scale + r->log_scale;
+        if (!l.leaf() && !r.leaf()) {
+            for (int s = 0; s < nSites; s++) {
+                Scalar maxval = q->partialLikes.max_coefficient(s);
+                while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
+                    q->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
+                    maxval *= UNDERFLOW_MULTIPLIER;
+                    q->log_scale(s) -= static_cast<int>(UNDERFLOW_STEP);
+                }
             }
         }
         q = q.par();
@@ -687,7 +693,7 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
     Eigen::Matrix<Scalar, Eigen::Dynamic, 1> Ls = decomTree.root()->partialLikes.dot_product(pi_vec);
     Scalar logL = 0.0;
     for (int s = 0; s < nSites; s++) {
-        patternL[s] = log(Ls(s)) + decomTree.root()->exponents(s);
+        patternL[s] = log(Ls(s)) + decomTree.root()->log_scale(s);
         logL += patternL[s] * patterns[s].second;
     }
     return logL;

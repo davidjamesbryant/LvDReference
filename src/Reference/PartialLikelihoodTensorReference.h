@@ -412,6 +412,54 @@ public:
                     data[16*p + 4*i + j] *= multiplier;
         }
     }
+
+    /**
+     * For each site p, scales all entries so the maximum is in [0.5, 1) and
+     * accumulates the binary exponent into log_scale(p).  Called unconditionally
+     * after every merge; multiply log_scale * LN2 once at the root to get the
+     * natural-log correction.
+     */
+    void normalize(Eigen::VectorXi& log_scale)
+    {
+        if (isVectors)
+        {
+            for (std::size_t p = 0; p < size; p++)
+            {
+                Scalar max_val = 0.0;
+                for (std::size_t i = 0; i < 4; i++)
+                    max_val = std::max(max_val, data[4*p + i]);
+                if (max_val > 0)
+                {
+                    int exp;
+                    std::frexp(max_val, &exp);
+                    Scalar scale = std::ldexp(Scalar(1.0), -exp);
+                    for (std::size_t i = 0; i < 4; i++)
+                        data[4*p + i] *= scale;
+                    log_scale(p) += exp;
+                }
+            }
+        }
+        else
+        {
+            for (std::size_t p = 0; p < size; p++)
+            {
+                Scalar max_val = 0.0;
+                for (std::size_t i = 0; i < 4; i++)
+                    for (std::size_t j = 0; j < 4; j++)
+                        max_val = std::max(max_val, data[16*p + 4*i + j]);
+                if (max_val > 0)
+                {
+                    int exp;
+                    std::frexp(max_val, &exp);
+                    Scalar scale = std::ldexp(Scalar(1.0), -exp);
+                    for (std::size_t i = 0; i < 4; i++)
+                        for (std::size_t j = 0; j < 4; j++)
+                            data[16*p + 4*i + j] *= scale;
+                    log_scale(p) += exp;
+                }
+            }
+        }
+    }
 };
 
 #endif // LVDREFERENCE_PARTIAL_LIKELIHOOD_TENSOR_REFERENCE_H
