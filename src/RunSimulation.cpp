@@ -174,7 +174,7 @@ bool parseArguments(int argc, char* argv[], SimulationOptions& options, string& 
         } else if (key == "-P") {
             if (!is_double(val, options.prior_branch_rate)) { errmsg = "ERROR: invalid value for -P\n\n" + Usage(); return false; }
         } else if (key == "-w") {
-            if (!is_double(val, options.proposal_width) || options.proposal_width <= 0) { errmsg = "ERROR: invalid value for -u\n\n" + Usage(); return false; }
+            if (!is_double(val, options.proposal_width) || options.proposal_width <= 0) { errmsg = "ERROR: invalid value for -w\n\n" + Usage(); return false; }
         } else {
             errmsg = "ERROR: unrecognised option " + key + "\n\n" + Usage();
             return false;
