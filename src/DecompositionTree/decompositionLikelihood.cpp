@@ -702,7 +702,7 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
 
 Scalar computeLikelihood(phylo<DecomNodeData>& decomTree, const SubstModel& model, const vector<pair<Pattern, int>>& patterns, const PatternDiffs& differences, vector<double>& patternL, Stopwatch& timer) {
     
-    cerr<<"com[puting L"<<endl;
+    //cerr<<"com[puting L"<<endl;
     
     timer.stop();
     int ntax = patterns[0].first.size();
@@ -715,7 +715,7 @@ Scalar computeLikelihood(phylo<DecomNodeData>& decomTree, const SubstModel& mode
     Scalar logL = 0.0;
     
     for (unsigned int i=0;i<patterns.size();i++) {
-        cerr<<i<<endl;
+        //cerr<<i<<endl;
         Scalar patternlogL = updatePartials(decomTree,taxaPointers,model,differences[i]);
         patternL[i] = patternlogL;
         logL += patternlogL * patterns[i].second;
