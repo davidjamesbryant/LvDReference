@@ -453,6 +453,8 @@ int main(int argc, char* argv[])
 
     ofstream treefile;
 
+    seed_random(42);
+
     //Output header
     if (options.outputHeader)
     {
@@ -586,5 +588,6 @@ int main(int argc, char* argv[])
             simT.clear();
         }
     }
+    PartialLikelihoodTensor::printCounts(cerr);
     return (0);
 }

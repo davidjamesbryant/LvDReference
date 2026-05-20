@@ -46,6 +46,28 @@ private:
     bool isVectors;  //True if this is 4xnsites, false if this is 4x4xnSites
     std::size_t size; //1 if this is a single vector or matrix, more if array
 public:
+    // Call counters — temporary instrumentation, remove before production.
+    inline static long count_dot_times             = 0;
+    inline static long count_scale_rows            = 0;
+    inline static long count_scale_columns         = 0;
+    inline static long count_matrix_vector_product = 0;
+    inline static long count_matrix_matrix_product = 0;
+    inline static long count_dot_product           = 0;
+    inline static long count_max_coefficient       = 0;
+    inline static long count_rescale               = 0;
+
+    static void printCounts(std::ostream& os) {
+        os << "PartialLikelihoodTensor call counts:\n"
+           << "  dot_times:               " << count_dot_times             << "\n"
+           << "  scale_rows:              " << count_scale_rows            << "\n"
+           << "  scale_columns:           " << count_scale_columns         << "\n"
+           << "  matrix_vector_product:   " << count_matrix_vector_product << "\n"
+           << "  matrix_matrix_product:   " << count_matrix_matrix_product << "\n"
+           << "  dot_product:             " << count_dot_product           << "\n"
+           << "  max_coefficient:         " << count_max_coefficient       << "\n"
+           << "  rescale:                 " << count_rescale               << "\n";
+    }
+
     PartialLikelihoodTensor() : isVectors(false), size(0) {}
 
     PartialLikelihoodTensor(bool isVectors_, std::size_t size_) : isVectors(isVectors_), size(size_)
@@ -120,6 +142,7 @@ public:
     __attribute__((always_inline))
     void dot_times(const PartialLikelihoodTensor& vecsA, const PartialLikelihoodTensor& vecsB)
     {
+        ++count_dot_times;
         assert(size == vecsA.size && size == vecsB.size);
         assert(isVectors && vecsA.isVectors && vecsB.isVectors);
 
@@ -146,6 +169,7 @@ public:
     __attribute__((always_inline))
     void scale_rows(const PartialLikelihoodTensor& vecsA, const PartialLikelihoodTensor& matsB)
     {
+        ++count_scale_rows;
         assert(!isVectors && size == vecsA.size && vecsA.isVectors && !matsB.isVectors);
 
               Scalar* __restrict__ Cdata = data.data();
@@ -187,6 +211,7 @@ public:
     __attribute__((always_inline))
     void scale_columns(const PartialLikelihoodTensor& matsA, const PartialLikelihoodTensor& vecsB)
     {
+        ++count_scale_columns;
         assert(!isVectors && size == vecsB.size && !matsA.isVectors && vecsB.isVectors);
 
               Scalar* __restrict__ Cdata = data.data();
@@ -228,6 +253,7 @@ public:
     __attribute__((always_inline))
     void matrix_vector_product(const PartialLikelihoodTensor& matsA, const PartialLikelihoodTensor& vecsB)
     {
+        ++count_matrix_vector_product;
         assert(size == vecsB.size && isVectors && !matsA.isVectors && vecsB.isVectors);
 
               Scalar* __restrict__ Cdata = data.data();
@@ -269,6 +295,7 @@ public:
     __attribute__((always_inline))
     void matrix_matrix_product(const PartialLikelihoodTensor& matsA, const PartialLikelihoodTensor& matsB)
     {
+        ++count_matrix_matrix_product;
               Scalar* __restrict__ Cdata = data.data();
         const Scalar* __restrict__ Adata = matsA.data.data();
         const Scalar* __restrict__ Bdata = matsB.data.data();
@@ -357,6 +384,7 @@ public:
     __attribute__((always_inline))
     Eigen::Matrix<Scalar, Eigen::Dynamic, 1> dot_product(const Eigen::Matrix<Scalar,4,1>& pi)
     {
+        ++count_dot_product;
         assert(isVectors);
         Eigen::Matrix<Scalar, Eigen::Dynamic, 1> lvec(size, 1);
         const Scalar* __restrict__ Ddata = data.data();
@@ -379,6 +407,7 @@ public:
      */
     Scalar max_coefficient(std::size_t p) const
     {
+        ++count_max_coefficient;
         assert(p < size);
         Scalar max_val = 0.0;
         if (isVectors)
@@ -401,6 +430,7 @@ public:
      */
     void rescale(std::size_t p, Scalar multiplier)
     {
+        ++count_rescale;
         assert(p < size);
         if (isVectors)
         {

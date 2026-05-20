@@ -577,7 +577,7 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
             // (leaf partials are fresh transition-matrix values in [0,1], so their product
             // with any corrected internal partial cannot underflow below UNDERFLOW_CUTOFF).
             p->log_scale = l->log_scale + r->log_scale;
-            if (!l.leaf() && !r.leaf()) {
+
                 for (int s = 0; s < nSites; s++) {
                     Scalar maxval = p->partialLikes.max_coefficient(s);
                     while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
@@ -586,7 +586,7 @@ Scalar computeLikelihood(phylo<DecomNodeDataAllSites>& decomTree, const SubstMod
                         p->log_scale(s) -= static_cast<int>(UNDERFLOW_STEP);
                     }
                 }
-            }
+
         }
     }
 
@@ -675,16 +675,16 @@ Scalar updateBranchLength(phylo<DecomNodeDataAllSites>& decomTree, const SubstMo
 
         // Per-site underflow correction; skipped when a child is a decomp-tree leaf.
         q->log_scale = l->log_scale + r->log_scale;
-        if (!l.leaf() && !r.leaf()) {
-            for (int s = 0; s < nSites; s++) {
-                Scalar maxval = q->partialLikes.max_coefficient(s);
-                while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
-                    q->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
-                    maxval *= UNDERFLOW_MULTIPLIER;
-                    q->log_scale(s) -= static_cast<int>(UNDERFLOW_STEP);
-                }
+
+        for (int s = 0; s < nSites; s++) {
+            Scalar maxval = q->partialLikes.max_coefficient(s);
+            while (maxval > 0 && maxval < UNDERFLOW_CUTOFF) {
+                q->partialLikes.rescale(s, UNDERFLOW_MULTIPLIER);
+                maxval *= UNDERFLOW_MULTIPLIER;
+                q->log_scale(s) -= static_cast<int>(UNDERFLOW_STEP);
             }
         }
+
         q = q.par();
     }
 
