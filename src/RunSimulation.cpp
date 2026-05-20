@@ -7,6 +7,7 @@
 
 #include <unistd.h>
 #include <ctime>
+#include <chrono>
 #include <list>
 #include <charconv>
 #include "Phylib/phylib.h"
@@ -41,6 +42,9 @@ public:
     bool outputHeader = true;
     bool outputTrees = false;
     int num_replicates;
+    int num_iterations = 1000;
+    double prior_branch_rate = 20.0;
+    double proposal_width    = 0.01;
 };
 
 std::ostream& operator<<(std::ostream& os, const SimulationOptions& opt) {
@@ -61,6 +65,9 @@ std::ostream& operator<<(std::ostream& os, const SimulationOptions& opt) {
     << "  ouputCompressionCount = " << opt.outputCompressionCount << "\n"
     << "  outputHeader = " << opt.outputHeader << "\n"
     << "  num_replicates = " << opt.num_replicates << "\n"
+    << "  num_iterations = " << opt.num_iterations << "\n"
+    << "  prior_branch_rate = " << opt.prior_branch_rate << "\n"
+    << "  proposal_width = " << opt.proposal_width << "\n"
     << "  ouputTrees = " << opt.outputTrees << "\n"
     << "}";
     
@@ -71,8 +78,8 @@ std::ostream& operator<<(std::ostream& os, const SimulationOptions& opt) {
 
 string Usage() {
     string s;
-    s = "RunSimulation -BCUYclhp  -n <ntax> -s <nsites> -r <height> -R <number of replicates> [-t <filename>]\n\n";
-    s +="\t -BCUYcdhp  (flags)\n";
+    s = "RunSimulation -BCUYclhp -n <ntax> -s <nsites> -r <height> -R <replicates> [-i <iterations>] [-P <rate>]\n\n";
+    s += "\t -BCUYclhpt  (flags)\n";
     s += "\t\tB:\t Simulate from beta critical distribution\n";
     s += "\t\tC:\t Simulate from random caterpillar\n";
     s += "\t\tU:\t Simulate from uniform distribution\n";
@@ -83,10 +90,13 @@ string Usage() {
     s += "\t\th:\t Output the header at top\n";
     s += "\t\tp:\t Output the likelihood and timing for the pruning algorithm\n";
     s += "\t\tt:\t Output trees to std err\n";
-    s += "\t -n  <ntax>\t Number of taxa\n";
-    s += "\t -s  <nsites>\t Number of sites\n";
-    s += "\t -r <height>\t Expected number of mutations from root to a tip\n";
-    s += "\t -R <number>\t Number of replicates\n";
+    s += "\t -n  <ntax>\t Number of taxa (required)\n";
+    s += "\t -s  <nsites>\t Number of sites (required)\n";
+    s += "\t -r  <height>\t Expected number of mutations from root to a tip (required)\n";
+    s += "\t -R  <number>\t Number of replicates (required)\n";
+    s += "\t -i  <number>\t Number of MCMC iterations (default: 1000)\n";
+    s += "\t -P  <rate>\t Prior branch rate for exponential prior (default: 20)\n";
+    s += "\t -w  <width>\t Half-width of uniform branch-length proposal (default: 0.01)\n";
     return s;
 }
 
@@ -114,51 +124,68 @@ bool is_double(const std::string& s, double& value) {
 
 
 bool parseArguments(int argc, char* argv[], SimulationOptions& options, string& errmsg) {
-    if (argc != 10) {
-        errmsg = "ERROR: incorrect number of arguments\n\n"+Usage();
+    if (argc < 2) {
+        errmsg = "ERROR: incorrect number of arguments\n\n" + Usage();
         return false;
     }
-    //Parse option string
+
+    // First argument must be the flags string
     string s = string(argv[1]);
-    if (s[0]!='-') {
-        errmsg = "ERROR: First argument must be the option string\n\n"+Usage();
+    if (s[0] != '-') {
+        errmsg = "ERROR: First argument must be the option string\n\n" + Usage();
         return false;
     }
-    options.test_uniform = s.find('U')!= std::string::npos;
-    options.test_caterpillar = s.find('C')!= std::string::npos;
-    options.test_beta_crit = s.find('B')!= std::string::npos;
-    options.test_yule = s.find('Y')!= std::string::npos;
-    
-    options.outputCompressionCount = s.find('c')!= std::string::npos;
-    options.outputPruningTime = s.find('p')!= std::string::npos;
-    options.outputHeader = s.find('h')!= std::string::npos;
-    options.outputLvDTime = s.find('l')!= std::string::npos;
-    options.outputTrees = s.find('t')!= std::string::npos;
-    
-    
-    //Number of taxa
-    if (string(argv[2])!="-n" || !is_int(string(argv[3]),options.ntax)) {
-        errmsg = "ERROR reading number of taxa\n\n"+Usage();
-        return false;
+    options.test_uniform            = s.find('U') != string::npos;
+    options.test_caterpillar        = s.find('C') != string::npos;
+    options.test_beta_crit          = s.find('B') != string::npos;
+    options.test_yule               = s.find('Y') != string::npos;
+    options.outputCompressionCount  = s.find('c') != string::npos;
+    options.outputPruningTime       = s.find('p') != string::npos;
+    options.outputHeader            = s.find('h') != string::npos;
+    options.outputLvDTime           = s.find('l') != string::npos;
+    options.outputTrees             = s.find('t') != string::npos;
+
+    // Track which required args have been seen
+    bool have_n = false, have_s = false, have_r = false, have_R = false;
+
+    // Parse remaining key-value pairs
+    for (int i = 2; i < argc; i++) {
+        string key = string(argv[i]);
+        if (i + 1 >= argc) {
+            errmsg = "ERROR: missing value for " + key + "\n\n" + Usage();
+            return false;
+        }
+        string val = string(argv[++i]);
+
+        if (key == "-n") {
+            if (!is_int(val, options.ntax))   { errmsg = "ERROR: invalid value for -n\n\n"  + Usage(); return false; }
+            have_n = true;
+        } else if (key == "-s") {
+            if (!is_int(val, options.nsites))  { errmsg = "ERROR: invalid value for -s\n\n"  + Usage(); return false; }
+            have_s = true;
+        } else if (key == "-r") {
+            if (!is_double(val, options.root_to_tip)) { errmsg = "ERROR: invalid value for -r\n\n" + Usage(); return false; }
+            have_r = true;
+        } else if (key == "-R") {
+            if (!is_int(val, options.num_replicates)) { errmsg = "ERROR: invalid value for -R\n\n" + Usage(); return false; }
+            have_R = true;
+        } else if (key == "-i") {
+            if (!is_int(val, options.num_iterations))    { errmsg = "ERROR: invalid value for -i\n\n" + Usage(); return false; }
+        } else if (key == "-P") {
+            if (!is_double(val, options.prior_branch_rate)) { errmsg = "ERROR: invalid value for -P\n\n" + Usage(); return false; }
+        } else if (key == "-w") {
+            if (!is_double(val, options.proposal_width) || options.proposal_width <= 0) { errmsg = "ERROR: invalid value for -u\n\n" + Usage(); return false; }
+        } else {
+            errmsg = "ERROR: unrecognised option " + key + "\n\n" + Usage();
+            return false;
+        }
     }
-    
-    //Number of sites
-    if (string(argv[4])!="-s" || !is_int(string(argv[5]),options.nsites)) {
-        errmsg = "ERROR reading number of sites\n\n"+Usage();
-        return false;
-    }
-    
-    //Number of sites
-    if (string(argv[6])!="-r" || !is_double(string(argv[7]),options.root_to_tip)) {
-        errmsg = "ERROR reading root to tip length\n\n"+Usage();
-        return false;
-    }
-    
-    //Number of replicates
-    if (string(argv[8])!="-R" || !is_int(string(argv[9]),options.num_replicates)) {
-        errmsg = "ERROR reading root to tip length\n\n"+Usage();
-        return false;
-    }
+
+    if (!have_n) { errmsg = "ERROR: -n <ntax> is required\n\n"       + Usage(); return false; }
+    if (!have_s) { errmsg = "ERROR: -s <nsites> is required\n\n"     + Usage(); return false; }
+    if (!have_r) { errmsg = "ERROR: -r <height> is required\n\n"     + Usage(); return false; }
+    if (!have_R) { errmsg = "ERROR: -R <replicates> is required\n\n" + Usage(); return false; }
+
     return true;
 }
 
@@ -280,6 +307,18 @@ long countAllPatterns(vector<sequence>& alignment, phylo<DecomNodeData>& tree) {
     return count;
 }
 
+// Assign stable branch IDs: leaves keep ids 0..ntax-1; internal non-root nodes
+// get ids -(ntax), -(ntax+1), ... so that abs(p->id) indexes branches 0..numBranches-1.
+static void assignBranchIDs(phylo<basic_newick>& tree) {
+    int ntax = 0;
+    for (auto p = tree.leftmost_leaf(); !p.null(); p = p.next_post())
+        if (p.leaf()) ntax++;
+    int nextId = ntax;
+    for (auto p = tree.leftmost_leaf(); !p.null(); p = p.next_post())
+        if (!p.leaf() && !p.root())
+            p->id = -nextId++;
+}
+
 double pathLengthToLeftmostLeaf(phylo<basic_newick>& tree) {
     double length = 0.0;
     auto p = tree.root().left();
@@ -368,52 +407,146 @@ int main(int argc, char* argv[]) {
             scale(simT,root2tip/currentRootToTip);
             double treeLength = computeLength(simT);
             simSequences(simT,model,nsites,alignment);
-            
+            assignBranchIDs(simT);
+
             //OUTPUT
             vector<string> taxa_names;
             for(int i=0;i<ntax;i++)
                 taxa_names.push_back("T"+to_string(i));
-            
+
             Stopwatch stopwatch;
-            
-            
+
             long tourLength = 0;
             stopwatch.reset();
             vector<pair<Pattern, int>> patterns = tspPatternSort(alignment,tourLength);
             double siteSortingTime = stopwatch.get();
-            
+
             auto differences = computePatternDifferences(patterns);
             long nPatterns = patterns.size();
-            
+
             phylo<DecomNodeData> decomTree;
             constructPruningDecomp(simT, decomTree);
             int pruningHeight = nodeHeight<DecomNodeData>(decomTree.root());
-            
-            double compressionCountPruning;
+
+            double compressionCountPruning = 0.0;
             if (options.outputCompressionCount)
-                compressionCountPruning =  (double)countAllPatterns(alignment,decomTree);
-            
-            stopwatch.reset();
-            vector<Scalar> patternL;
-            double Lpruning, pruningTime;
+                compressionCountPruning = (double)countAllPatterns(alignment,decomTree);
+
+            vector<double> patternL;
+            double Lpruning = 0.0, pruningTime = 0.0;
             if (options.outputPruningTime) {
-                Lpruning = computeLikelihood(decomTree, model, patterns, differences, patternL,stopwatch);
-                pruningTime = stopwatch.get();
+                // Initial log-likelihood
+                Stopwatch sw0;
+                Lpruning = computeLikelihood(decomTree, model, patterns, differences, patternL, sw0);
+
+                // MCMC on pruning decomp tree
+                phylo<DecomNodeDataAllSites> pruningT;
+                copy(decomTree, pruningT);
+                {
+                    Stopwatch sw;
+                    vector<double> mcmcPatternL;
+                    Scalar logLik = computeLikelihood(pruningT, model, patterns, mcmcPatternL, sw);
+
+                    Scalar logPrior = 0.0;
+                    for (auto p = pruningT.leftmost_leaf(); !p.null(); p = p.next_post())
+                        if (p.leaf())
+                            logPrior += log(options.prior_branch_rate) - options.prior_branch_rate * p->length;
+                    Scalar logPost = logLik + logPrior;
+
+                    int numBranches = 0;
+                    for (auto p = pruningT.leftmost_leaf(); !p.null(); p = p.next_post())
+                        if (p.leaf()) numBranches++;
+                    vector<phylo<DecomNodeDataAllSites>::iterator> branches(numBranches);
+                    for (auto p = pruningT.leftmost_leaf(); !p.null(); p = p.next_post())
+                        if (p.leaf())
+                            branches[abs(p->id)] = p;
+
+                    seed_random(42);
+                    for (int iter = 0; iter < options.num_iterations; ++iter) {
+                        int branchIdx = (int)random_num((unsigned int)numBranches);
+                        auto bp = branches[branchIdx];
+                        double oldLen = bp->length;
+                        double newLen = oldLen + randu(-options.proposal_width, options.proposal_width);
+                        if (newLen > 0.0) {
+                            auto t0 = chrono::steady_clock::now();
+                            Scalar newLogLik = updateBranchLength(pruningT, model, patterns, mcmcPatternL, bp, newLen);
+                            double elapsed = chrono::duration<double>(chrono::steady_clock::now() - t0).count();
+                            Scalar newLogPrior = logPrior + options.prior_branch_rate * (oldLen - newLen);
+                            Scalar newLogPost  = newLogLik + newLogPrior;
+                            if (log(randu()) < newLogPost - logPost) {
+                                logPrior = newLogPrior;
+                                logPost  = newLogPost;
+                            } else {
+                                auto t1 = chrono::steady_clock::now();
+                                updateBranchLength(pruningT, model, patterns, mcmcPatternL, bp, oldLen);
+                                elapsed += chrono::duration<double>(chrono::steady_clock::now() - t1).count();
+                            }
+                            pruningTime += elapsed;
+                        }
+                    }
+                }
             }
-            
+
             decomTree.clear();
             constructDecompTree(simT, decomTree,false);
             int decomHeight = nodeHeight<DecomNodeData>(decomTree.root());
-            
-            double compressionCountDecom;
+
+            double compressionCountDecom = 0.0;
             if (options.outputCompressionCount)
-                compressionCountDecom =  (double)countAllPatterns(alignment,decomTree);
-            
-            stopwatch.reset();
-            double Ldecom, decomTime;
+                compressionCountDecom = (double)countAllPatterns(alignment,decomTree);
+
+            double Ldecom = 0.0, decomTime = 0.0;
             if (options.outputLvDTime) {
-                Ldecom = computeLikelihood(decomTree, model, patterns, differences, patternL,stopwatch);
-                decomTime = stopwatch.get();
+                // Initial log-likelihood
+                Stopwatch sw0;
+                Ldecom = computeLikelihood(decomTree, model, patterns, differences, patternL, sw0);
+
+                // MCMC on LvD decomp tree
+                phylo<DecomNodeDataAllSites> lvdT;
+                copy(decomTree, lvdT);
+                {
+                    Stopwatch sw;
+                    vector<double> mcmcPatternL;
+                    Scalar logLik = computeLikelihood(lvdT, model, patterns, mcmcPatternL, sw);
+
+                    Scalar logPrior = 0.0;
+                    for (auto p = lvdT.leftmost_leaf(); !p.null(); p = p.next_post())
+                        if (p.leaf())
+                            logPrior += log(options.prior_branch_rate) - options.prior_branch_rate * p->length;
+                    Scalar logPost = logLik + logPrior;
+
+                    int numBranches = 0;
+                    for (auto p = lvdT.leftmost_leaf(); !p.null(); p = p.next_post())
+                        if (p.leaf()) numBranches++;
+                    vector<phylo<DecomNodeDataAllSites>::iterator> branches(numBranches);
+                    for (auto p = lvdT.leftmost_leaf(); !p.null(); p = p.next_post())
+                        if (p.leaf())
+                            branches[abs(p->id)] = p;
+
+                    seed_random(42);
+                    for (int iter = 0; iter < options.num_iterations; ++iter) {
+                        int branchIdx = (int)random_num((unsigned int)numBranches);
+                        auto bp = branches[branchIdx];
+                        double oldLen = bp->length;
+                        double newLen = oldLen + randu(-options.proposal_width, options.proposal_width);
+                        if (newLen > 0.0) {
+                            auto t0 = chrono::steady_clock::now();
+                            Scalar newLogLik = updateBranchLength(lvdT, model, patterns, mcmcPatternL, bp, newLen);
+                            double elapsed = chrono::duration<double>(chrono::steady_clock::now() - t0).count();
+                            Scalar newLogPrior = logPrior + options.prior_branch_rate * (oldLen - newLen);
+                            Scalar newLogPost  = newLogLik + newLogPrior;
+                            if (log(randu()) < newLogPost - logPost) {
+                                logPrior = newLogPrior;
+                                logPost  = newLogPost;
+                            } else {
+                                auto t1 = chrono::steady_clock::now();
+                                updateBranchLength(lvdT, model, patterns, mcmcPatternL, bp, oldLen);
+                                elapsed += chrono::duration<double>(chrono::steady_clock::now() - t1).count();
+                            }
+                            decomTime += elapsed;
+                        }
+                    }
+                }
             }
             
             
