@@ -326,6 +326,12 @@ template<typename T> double root_to_tip(typename phylo<T>::iterator p) {
         int nleaves;
         return summedNodeHeight<T>(p,nleaves);
     }
+
+    template<typename T> double averageNodeHeight(typename phylo<T>::iterator p) {
+        int nleaves;
+        int sum = summedNodeHeight<T>(p,nleaves);
+        return static_cast<double>(sum)/static_cast<double>(nleaves);
+    }
     
     template<typename T> int summedNodeHeight(typename phylo<T>::iterator p, int& nleaves) {
         if (p.leaf()) {

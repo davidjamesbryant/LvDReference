@@ -62,6 +62,14 @@ public:
 	virtual Scalar Pij(base i, base j, Scalar t) const = 0;
 	virtual int num_states() const = 0;
 
+    virtual Eigen::Matrix<Scalar, 4, 1> get_pi() const
+    {
+        Eigen::Matrix<Scalar, 4, 1> pi_vec;
+        for (int i=0; i<num_states(); i++)
+            pi_vec(i) = pi(i);
+        return pi_vec;
+    }
+
     virtual Eigen::Matrix<Scalar, 4, 4> transitionMatrix(Scalar t) const {
         Eigen::Matrix<Scalar, 4, 4> P;
         for (int i = 0; i < num_states(); i++)
@@ -198,13 +206,13 @@ public:
         nPatterns = n;
         partials.resize(4, n);
         partials.setZero();
-        exponents.resize(n);
-        exponents.setZero();
+        log_scale.resize(n);
+        log_scale.setZero();
     }
 
     int nPatterns;
     Eigen::Matrix<Scalar, 4, Eigen::Dynamic> partials;
-    Eigen::VectorXi exponents;
+    Eigen::VectorXi log_scale;
     bool isDirty;
 };
 

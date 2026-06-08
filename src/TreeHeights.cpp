@@ -43,8 +43,7 @@ static bool handleInput(int argc, char* argv[], bool& printHeader, vector<string
 {
     filenames.clear();
     if (argc <= 1) {
-        // No filenames provided; still considered "parsed OK".
-        return true;
+        return false;
     }
     
     int firstFile = 1;
@@ -88,6 +87,9 @@ int main(int argc, char* argv[]) {
         <<"height pruning tree\t"
         <<"height LvD tree\t"
         <<"height ratio\t"
+        <<"av height pruning tree\t"
+        <<"av height LvD tree\t"
+        <<"ratio av height \t"
         <<endl;
     }
     //Print header
@@ -107,7 +109,7 @@ int main(int argc, char* argv[]) {
         int tree_num=0;
         bool done = false;
         
-        while (!done) {
+        while (true) {
             taxa_names.clear();
             try {
                 read_newick(is_tree, newickTree, taxa_names, 0.0, false);
@@ -138,10 +140,14 @@ int main(int argc, char* argv[]) {
             phylo<DecomNodeData> decomTree;
             constructPruningDecomp(newickTree, decomTree);
             int pruning_height = nodeHeight<DecomNodeData>(decomTree.root());
+            double pruning_av_height = averageNodeHeight<DecomNodeData>(decomTree.root());
             constructDecompTree(newickTree, decomTree, false);
             int decomp_height = nodeHeight<DecomNodeData>(decomTree.root());
+            double decom_av_height = averageNodeHeight<DecomNodeData>(decomTree.root());
             double ratio = ((double)pruning_height)/decomp_height;
-            
+            double av_ratio = ((double)pruning_av_height)/decom_av_height;
+
+
             //Output
             cout<<shortFileName<<"\t"
             <<tree_num<<"\t"
@@ -151,6 +157,9 @@ int main(int argc, char* argv[]) {
             <<pruning_height<<"\t"
             <<decomp_height<<"\t"
             <<ratio<<"\t"
+            <<pruning_av_height<<"\t"
+            <<decom_av_height<<"\t"
+            <<av_ratio<<"\t"
             <<endl;
         }
         is_tree.close();

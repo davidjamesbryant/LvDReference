@@ -77,8 +77,9 @@ bool write_phylip_seqs(const string& filename, const vector<string>& taxa_names,
 /*************
  Extract a vector of patterns with their frequencies.
  ****/
+ PatternVector sortPatterns(const vector<sequence>& sequences);  //Conventional radix sort
 
-PatternVector compressPatterns(const vector<sequence>& sequences, PatternSorter method);
+ PatternVector compressPatterns(const vector<sequence>& sequences, PatternSorter method); //Some experimental alternatives
 
 /**
  Extract patterns and sort them (approximately) to minimise the tour length.
