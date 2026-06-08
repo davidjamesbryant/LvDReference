@@ -25,7 +25,7 @@ using namespace Phylib;
 
 class MCMCOptions {
 public:
-    double prior_rate     = 1.0;    // Rate λ of exponential prior on branch lengths
+    double prior_rate     = 20.0;    // Rate λ of exponential prior on branch lengths
     double proposal_width = 0.01;   // Half-width of uniform proposal distribution
     int    num_iterations = 1000;   // Number of MCMC iterations
 
@@ -69,9 +69,9 @@ static string Usage() {
     s += "\t\t L:  Run MCMC using decomposition tree with LvD layout\n";
     s += "\t\t h:  Output header row in output files\n";
     s += "\t <At least one of S, P, L must be selected>\n\n";
-    s += "\t -p <prior>       Rate parameter λ for exponential prior on branch lengths\n";
-    s += "\t -u <proposal>    Half-width of uniform proposal distribution\n";
-    s += "\t -i <iterations>  Number of MCMC iterations (positive integer)\n";
+    s += "\t -p <prior>       Rate parameter λ for exponential prior on branch lengths (default 20)\n";
+    s += "\t -u <proposal>    Half-width of uniform proposal distribution (default 0.01)\n";
+    s += "\t -i <iterations>  Number of MCMC iterations (positive integer - default 1000)\n";
     s += "\t <seqfile>        PHYLIP-format sequence file\n";
     s += "\t <treefile>       Newick-format tree file\n";
     return s;
