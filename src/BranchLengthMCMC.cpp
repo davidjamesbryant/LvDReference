@@ -24,34 +24,36 @@ using namespace Phylib;
 // Options
 // ─────────────────────────────────────────────────────────────────────────────
 
-class MCMCOptions {
+class MCMCOptions
+{
 public:
-    double prior_branch_rate     = 20.0;    // Rate λ of exponential prior on branch lengths
-    double proposal_width = 0.01;   // Half-width of uniform proposal distribution
-    int    num_iterations = 1000;   // Number of MCMC iterations
+    double prior_branch_rate = 20.0; // Rate λ of exponential prior on branch lengths
+    double proposal_width = 0.01; // Half-width of uniform proposal distribution
+    int num_iterations = 1000; // Number of MCMC iterations
 
-    bool run_standard = false;   // Standard likelihood (NodeDataAllSites)
-    bool run_pruning  = false;   // Decomposition with pruning tree
-    bool run_lvd      = false;   // Decomposition with LvD tree
+    bool run_standard = false; // Standard likelihood (NodeDataAllSites)
+    bool run_pruning = false; // Decomposition with pruning tree
+    bool run_lvd = false; // Decomposition with LvD tree
     bool output_header = true;
 
     string seq_filename;
     string tree_filename;
 };
 
-ostream& operator<<(ostream& os, const MCMCOptions& opt) {
+ostream& operator<<(ostream& os, const MCMCOptions& opt)
+{
     ios::fmtflags f = os.flags();
     os << boolalpha;
     os << "MCMCOptions {\n"
-       << "  prior_branch_rate     = " << opt.prior_branch_rate     << "\n"
-       << "  proposal_width = " << opt.proposal_width << "\n"
-       << "  num_iterations = " << opt.num_iterations << "\n"
-       << "  run_standard   = " << opt.run_standard   << "\n"
-       << "  run_pruning    = " << opt.run_pruning    << "\n"
-       << "  run_lvd        = " << opt.run_lvd        << "\n"
-       << "  seq_filename   = " << opt.seq_filename   << "\n"
-       << "  tree_filename  = " << opt.tree_filename  << "\n"
-       << "}";
+        << "  prior_branch_rate     = " << opt.prior_branch_rate << "\n"
+        << "  proposal_width = " << opt.proposal_width << "\n"
+        << "  num_iterations = " << opt.num_iterations << "\n"
+        << "  run_standard   = " << opt.run_standard << "\n"
+        << "  run_pruning    = " << opt.run_pruning << "\n"
+        << "  run_lvd        = " << opt.run_lvd << "\n"
+        << "  seq_filename   = " << opt.seq_filename << "\n"
+        << "  tree_filename  = " << opt.tree_filename << "\n"
+        << "}";
     os.flags(f);
     return os;
 }
@@ -61,9 +63,10 @@ ostream& operator<<(ostream& os, const MCMCOptions& opt) {
 // Argument parsing
 // ─────────────────────────────────────────────────────────────────────────────
 
-static string Usage() {
+static string Usage()
+{
     string s;
-    s  = "BranchLengthMCMC [-SPLh] -p <prior> -u <proposal> -i <iterations> <seqfile> <treefile>\n\n";
+    s = "BranchLengthMCMC [-SPLh] -p <prior> -u <proposal> -i <iterations> <seqfile> <treefile>\n\n";
     s += "\t Flags (combined as first argument):\n";
     s += "\t\t S:  Run MCMC using standard likelihood (NodeDataAllSites)\n";
     s += "\t\t P:  Run MCMC using decomposition tree with pruning layout\n";
@@ -78,77 +81,87 @@ static string Usage() {
     return s;
 }
 
-static bool is_int(const string& s, int& value) {
-    try {
+static bool is_int(const string& s, int& value)
+{
+    try
+    {
         size_t pos;
         int v = stoi(s, &pos, 10);
         if (pos != s.size()) return false;
         value = v;
         return true;
-    } catch (...) {
+    }
+    catch (...)
+    {
         return false;
     }
 }
 
-static bool is_double(const string& s, double& value) {
-    try {
+static bool is_double(const string& s, double& value)
+{
+    try
+    {
         size_t pos;
         value = stod(s, &pos);
         return pos == s.size();
-    } catch (...) {
+    }
+    catch (...)
+    {
         return false;
     }
 }
 
-static bool parseArguments(int argc, char* argv[], MCMCOptions& options, string& errmsg) {
-    // Expected layout:
-    //   argv[1]  flag string  e.g. -SPh
-    //   argv[2]  -p   argv[3]  prior_branch_rate
-    //   argv[4]  -u   argv[5]  proposal_width
-    //   argv[6]  -i   argv[7]  num_iterations
-    //   argv[8]  seqfile
-    //   argv[9]  treefile
-    if (argc != 10) {
+static bool parseArguments(int argc, char* argv[], MCMCOptions& options, string& errmsg)
+{
+    if (argc != 10)
+    {
         errmsg = "ERROR: incorrect number of arguments\n\n" + Usage();
         return false;
     }
 
     string flags = string(argv[1]);
-    if (flags[0] != '-') {
+    if (flags[0] != '-')
+    {
         errmsg = "ERROR: first argument must be the flag string (e.g. -SPh)\n\n" + Usage();
         return false;
     }
-    options.run_standard  = flags.find('S') != string::npos;
-    options.run_pruning   = flags.find('P') != string::npos;
-    options.run_lvd       = flags.find('L') != string::npos;
+    options.run_standard = flags.find('S') != string::npos;
+    options.run_pruning = flags.find('P') != string::npos;
+    options.run_lvd = flags.find('L') != string::npos;
     options.output_header = flags.find('h') != string::npos;
 
-    if (!options.run_standard && !options.run_pruning && !options.run_lvd) {
+    if (!options.run_standard && !options.run_pruning && !options.run_lvd)
+    {
         errmsg = "ERROR: at least one of S, P, L must be selected\n\n" + Usage();
         return false;
     }
 
-    if (string(argv[2]) != "-p" || !is_double(string(argv[3]), options.prior_branch_rate) || options.prior_branch_rate <= 0) {
+    if (string(argv[2]) != "-p" || !is_double(string(argv[3]), options.prior_branch_rate) || options.prior_branch_rate
+        <= 0)
+    {
         errmsg = "ERROR reading prior rate: -p must be followed by a positive number\n\n" + Usage();
         return false;
     }
 
-    if (string(argv[4]) != "-u" || !is_double(string(argv[5]), options.proposal_width) || options.proposal_width <= 0) {
+    if (string(argv[4]) != "-u" || !is_double(string(argv[5]), options.proposal_width) || options.proposal_width <= 0)
+    {
         errmsg = "ERROR reading proposal width: -u must be followed by a positive number\n\n" + Usage();
         return false;
     }
 
-    if (string(argv[6]) != "-i" || !is_int(string(argv[7]), options.num_iterations) || options.num_iterations <= 0) {
+    if (string(argv[6]) != "-i" || !is_int(string(argv[7]), options.num_iterations) || options.num_iterations <= 0)
+    {
         errmsg = "ERROR reading iteration count: -i must be followed by a positive integer\n\n" + Usage();
         return false;
     }
 
-    options.seq_filename  = string(argv[8]);
+    options.seq_filename = string(argv[8]);
     options.tree_filename = string(argv[9]);
     return true;
 }
 
-static string get_stem(const string& path) {
+static string get_stem(const string& path)
+{
     size_t slash = path.find_last_of("/\\");
     string filename = (slash == string::npos) ? path : path.substr(slash + 1);
     size_t dot = filename.find_last_of('.');
@@ -157,24 +170,17 @@ static string get_stem(const string& path) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Results
-// ─────────────────────────────────────────────────────────────────────────────
-
-
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MCMC stubs
+// MCMC functions
 // Each function runs num_iterations of a Metropolis-Hastings random-walk on
 // all branch lengths, using an exponential(prior_branch_rate) prior and a uniform
 // proposal of half-width proposal_width on a single randomly chosen branch.
 // ─────────────────────────────────────────────────────────────────────────────
 
 static MCMCResults runStandardMCMC(
-        phylo<basic_newick>&             tree,
-        const SubstModel&                model,
-        const vector<pair<Pattern,int>>& patterns,
-        const MCMCOptions&               options)
+    phylo<basic_newick>& tree,
+    const SubstModel& model,
+    const vector<pair<Pattern, int>>& patterns,
+    const MCMCOptions& options)
 {
     // Fixed seed — all MCMC variants seed identically so proposals are directly comparable
     seed_random(42);
@@ -212,38 +218,45 @@ static MCMCResults runStandardMCMC(
     results.new_length.reserve(options.num_iterations);
     results.accepted.reserve(options.num_iterations);
     results.initialLogPost = logPost;
-    results.numBranches    = numBranches;
+    results.numBranches = numBranches;
 
-    for (int iter = 0; iter < options.num_iterations; ++iter) {
-        int    branchIdx = (int)random_num((unsigned int)numBranches);
-        auto   p         = branches[branchIdx];
-        double oldLen    = p->length;
-        double newLen    = oldLen + randu(-options.proposal_width, options.proposal_width);
+    for (int iter = 0; iter < options.num_iterations; ++iter)
+    {
+        int branchIdx = (int)random_num((unsigned int)numBranches);
+        auto p = branches[branchIdx];
+        double oldLen = p->length;
+        double newLen = oldLen + randu(-options.proposal_width, options.proposal_width);
 
         bool accept = false;
         double likeTime = 0.0;
-        if (newLen > 0.0) {
+        if (newLen > 0.0)
+        {
             auto t0 = chrono::steady_clock::now();
-            Scalar newLogLik   = updateBranchLength(t, model, patterns, p, newLen);
+            Scalar newLogLik = updateBranchLength(t, model, patterns, p, newLen);
             likeTime += chrono::duration<double>(chrono::steady_clock::now() - t0).count();
 
             // Prior ratio for exponential: log p(new) - log p(old) = -rate*(new - old)
             Scalar newLogPrior = logPrior + options.prior_branch_rate * (oldLen - newLen);
-            Scalar newLogPost  = newLogLik + newLogPrior;
+            Scalar newLogPost = newLogLik + newLogPrior;
 
             // Metropolis-Hastings; proposal is symmetric so no Hastings correction needed
             accept = (log(randu()) < newLogPost - logPost);
 
-            if (accept) {
-                logLik   = newLogLik;
+            if (accept)
+            {
+                logLik = newLogLik;
                 logPrior = newLogPrior;
-                logPost  = newLogPost;
-            } else {
+                logPost = newLogPost;
+            }
+            else
+            {
                 auto t1 = chrono::steady_clock::now();
-                updateBranchLength(t, model, patterns, p, oldLen);  // restore
+                updateBranchLength(t, model, patterns, p, oldLen); // restore
                 likeTime += chrono::duration<double>(chrono::steady_clock::now() - t1).count();
             }
-        } else {
+        }
+        else
+        {
             results.numNegative++;
         }
 
@@ -260,14 +273,14 @@ static MCMCResults runStandardMCMC(
     return results;
 }
 
-// Shared implementation for both decomposition-tree MCMC variants.
-// useLvD=false → pruning layout; useLvD=true → LvD (greedy) layout.
 static MCMCResults runDecomMCMC(
-        phylo<basic_newick>&             tree,
-        const SubstModel&                model,
-        const vector<pair<Pattern,int>>& patterns,
-        const MCMCOptions&               options,
-        bool                             useLvD)
+    phylo<basic_newick>& tree,
+    const SubstModel& model,
+    const vector<pair<Pattern, int>>& patterns,
+    const MCMCOptions& options,
+    int& treeHeight,
+    double& avTreeHeight,
+    bool useLvD)
 {
     seed_random(42);
 
@@ -280,86 +293,104 @@ static MCMCResults runDecomMCMC(
     phylo<DecomNodeDataAllSites> t;
     copy(decomBase, t);
 
-    cerr << "Height of decomposition tree = " << nodeHeight<DecomNodeData>(decomBase.root()) << endl;
-    cerr << "Average height of decomposition tree = " << averageNodeHeight<DecomNodeData>(decomBase.root()) << endl;
+    treeHeight = nodeHeight<DecomNodeData>(decomBase.root());
+    avTreeHeight = averageNodeHeight<DecomNodeData>(decomBase.root());
 
-    return ::runDecomMCMC(t, model, patterns, options.prior_branch_rate, options.proposal_width, options.num_iterations);
+    return runDecomMCMC(t, model, patterns, options.prior_branch_rate, options.proposal_width, options.num_iterations);
 }
-
-static MCMCResults runPruningMCMC(
-        phylo<basic_newick>&             tree,
-        const SubstModel&                model,
-        const vector<pair<Pattern,int>>& patterns,
-        const MCMCOptions&               options)
-{
-    return runDecomMCMC(tree, model, patterns, options, false);
-}
-
-static MCMCResults runLvDMCMC(
-        phylo<basic_newick>&             tree,
-        const SubstModel&                model,
-        const vector<pair<Pattern,int>>& patterns,
-        const MCMCOptions&               options)
-{
-    return runDecomMCMC(tree, model, patterns, options, true);
-}
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // main
 // ─────────────────────────────────────────────────────────────────────────────
 
-int main(int argc, char* argv[]) {
-
+int main(int argc, char* argv[])
+{
     MCMCOptions options;
     string errmsg;
-    if (!parseArguments(argc, argv, options, errmsg)) {
+    if (!parseArguments(argc, argv, options, errmsg))
+    {
         cerr << errmsg << endl;
         exit(1);
     }
 
+    if (options.output_header)
+    {
+        cout << "Alignment\t"
+            << "nsites\t"
+            << "nPatterns\t"
+            << "nIterations\t"
+            << "Treefile\t"
+            << "ntax\t";
+        if (options.run_standard)
+            cout << "standard time\t";
+        if (options.run_pruning)
+        {
+            cout << "height pruning tree\t"
+                << "av_height pruning tree\t"
+                << "pruning time\t";
+        }
+        if (options.run_lvd)
+        {
+            cout << "height LvD tree\t"
+                << "av_height LvD tree\t"
+                << "LvD time\t";
+        }
+        cout << endl;
+    }
+
+
     // Read sequence file
-    vector<string>   taxa_names;
+    vector<string> taxa_names;
     vector<sequence> alignment;
     {
         ifstream seqFile(options.seq_filename);
-        if (!seqFile) {
+        if (!seqFile)
+        {
             cerr << "Error opening sequence file: " << options.seq_filename << "\n";
             exit(2);
         }
-        try {
-            if (!read_phylip_seqs(seqFile, taxa_names, alignment)) {
+        try
+        {
+            if (!read_phylip_seqs(seqFile, taxa_names, alignment))
+            {
                 cerr << "Error reading sequence file: " << options.seq_filename << "\n";
                 exit(3);
             }
-        } catch (const PhylibException& e) {
+        }
+        catch (const PhylibException& e)
+        {
             cerr << "Error reading sequence file:\n" << e.getMessage() << "\n";
             exit(4);
         }
     }
 
-    // Compress sites into patterns (TSP-ordered to minimise inter-pattern distance)
-    vector<pair<Pattern,int>> patterns = sortPatterns(alignment);
+    // Compress sites into patterns
+    vector<pair<Pattern, int>> patterns = sortPatterns(alignment);
 
     // Read tree file (first tree only)
     phylo<basic_newick> newickTree;
+
+    ifstream treeFile(options.tree_filename);
+    if (!treeFile)
     {
-        ifstream treeFile(options.tree_filename);
-        if (!treeFile) {
-            cerr << "Error opening tree file: " << options.tree_filename << "\n";
-            exit(5);
-        }
-        try {
-            read_newick(treeFile, newickTree, taxa_names, 0.0, true);
-        } catch (const PhylibException& e) {
-            cerr << "Error reading tree file:\n" << e.getMessage() << "\n";
-            exit(6);
-        }
-        if (newickTree.empty()) {
-            cerr << "No tree found in tree file: " << options.tree_filename << "\n";
-            exit(7);
-        }
+        cerr << "Error opening tree file: " << options.tree_filename << "\n";
+        exit(5);
     }
+    try
+    {
+        read_newick(treeFile, newickTree, taxa_names, 0.0, true);
+    }
+    catch (const PhylibException& e)
+    {
+        cerr << "Error reading tree file:\n" << e.getMessage() << "\n";
+        exit(6);
+    }
+    if (newickTree.empty())
+    {
+        cerr << "No tree found in tree file: " << options.tree_filename << "\n";
+        exit(7);
+    }
+
     if (!checkIfBinary(newickTree))
         resolveTree(newickTree);
 
@@ -370,77 +401,40 @@ int main(int argc, char* argv[]) {
 
 
     MCMCResults standardResults, pruningResults, lvdResults;
+    int pruning_height, lvd_height;
+    double pruning_avheight, lvd_avheight;
+    pruning_height = lvd_height = 0;
+    pruning_avheight = lvd_avheight = 0.0;
+
+
     if (options.run_standard)
         standardResults = runStandardMCMC(newickTree, model, patterns, options);
     if (options.run_pruning)
-        pruningResults  = runPruningMCMC (newickTree, model, patterns, options);
+        pruningResults = runDecomMCMC(newickTree, model, patterns, options, pruning_height, pruning_avheight, false);
     if (options.run_lvd)
-        lvdResults      = runLvDMCMC    (newickTree, model, patterns, options);
+        lvdResults = runDecomMCMC(newickTree, model, patterns, options, lvd_height, lvd_avheight, true);
 
     // ─── Diagnostics ─────────────────────────────────────────────────────────
-    int N = options.num_iterations;
-    auto totalTime = [&](const MCMCResults& r) {
-        return accumulate(r.iterTime.begin(), r.iterTime.end(), 0.0);
-    };
-
-    cerr << fixed << setprecision(4);
-    cerr << "\n--- MCMC diagnostics (" << N << " iterations) ---\n";
-    cerr << left << setw(12) << "method"
-         << right << setw(12) << "total_time"
-         << setw(12) << "accept_rate"
-         << setw(14) << "negative_rate" << "\n";
-
-    auto printRow = [&](const string& name, const MCMCResults& r) {
-        cerr << left << setw(12) << name
-             << right << setw(11) << totalTime(r) << "s"
-             << setw(11) << (double)r.numAccepted / N << " "
-             << setw(13) << (double)r.numNegative / N << " " << "\n";
-    };
-    if (options.run_standard) printRow("standard",  standardResults);
-    if (options.run_pruning)  printRow("pruning",   pruningResults);
-    if (options.run_lvd)      printRow("lvd",        lvdResults);
-
-
-    // ─── Output files ────────────────────────────────────────────────────────
-    string stem = get_stem(options.seq_filename) + "_" + get_stem(options.tree_filename);
-
-    // Posterior log-densities — one row per iteration, one column per active analysis
-    {
-        ofstream postFile(stem + "_posterior.tsv");
-        if (options.output_header) {
-            postFile << "iteration";
-            if (options.run_standard) postFile << "\tstandard_logP";
-            if (options.run_pruning)  postFile << "\tpruning_logP";
-            if (options.run_lvd)      postFile << "\tlvd_logP";
-            postFile << "\n";
+    cout << fixed << setprecision(4);
+    cout << get_stem(options.seq_filename)<<"\t"   //seq name
+    <<alignment[0].size()<<"\t"    //nsites
+    <<patterns.size()<<"\t"     //npatterns
+    <<options.num_iterations<<"\t"
+    <<get_stem(options.tree_filename)<<"\t"
+    <<taxa_names.size()<<"\t";
+    if (options.run_standard)
+         cout<<accumulate(standardResults.iterTime.begin(),standardResults.iterTime.end(), 0.0) <<"\t";
+    if (options.run_pruning)
+        {
+            cout << pruning_height<<"\t"<<pruning_avheight<<"\t";
+            cout<< accumulate(pruningResults.iterTime.begin(),pruningResults.iterTime.end(), 0.0) <<"\t";
         }
-        for (int i = 0; i < options.num_iterations; i++) {
-            postFile << (i + 1);
-            if (options.run_standard) postFile << "\t" << standardResults.logPosterior[i];
-            if (options.run_pruning)  postFile << "\t" << pruningResults.logPosterior[i];
-            if (options.run_lvd)      postFile << "\t" << lvdResults.logPosterior[i];
-            postFile << "\n";
+    if (options.run_lvd)
+        {
+            cout << lvd_height<<"\t"<<lvd_avheight<<"\t";
+            cout<< accumulate(lvdResults.iterTime.begin(),lvdResults.iterTime.end(), 0.0) <<"\t";
         }
-    }
-
-    // Per-iteration wall-clock times — one row per iteration, one column per active analysis
-    {
-        ofstream timesFile(stem + "_times.tsv");
-        if (options.output_header) {
-            timesFile << "iteration";
-            if (options.run_standard) timesFile << "\tstandard_time";
-            if (options.run_pruning)  timesFile << "\tpruning_time";
-            if (options.run_lvd)      timesFile << "\tlvd_time";
-            timesFile << "\n";
-        }
-        for (int i = 0; i < options.num_iterations; i++) {
-            timesFile << (i + 1);
-            if (options.run_standard) timesFile << "\t" << standardResults.iterTime[i];
-            if (options.run_pruning)  timesFile << "\t" << pruningResults.iterTime[i];
-            if (options.run_lvd)      timesFile << "\t" << lvdResults.iterTime[i];
-            timesFile << "\n";
-        }
-    }
+    cout << endl;
 
     return 0;
 }
