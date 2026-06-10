@@ -13,6 +13,7 @@
 #include "standardLikelihood.h"
 #include "DecompositionTree/decompositionTree.h"
 #include "DecompositionTree/decompositionLikelihood.h"
+#include "DecomMCMC.h"
 
 using namespace Phylib;
 
@@ -324,115 +325,6 @@ void simSequences(phylo<basic_newick>& T, const SubstModel& model, int nsites, v
 }
 
 
-// Assign stable branch IDs: leaves keep ids 0..ntax-1; internal non-root nodes
-// get ids -(ntax), -(ntax+1), ... so that abs(p->id) indexes branches 0..numBranches-1.
-static void assignBranchIDs(phylo<basic_newick>& tree)
-{
-    int ntax = 0;
-    for (auto p = tree.leftmost_leaf(); !p.null(); p = p.next_post())
-        if (p.leaf()) ntax++;
-    int nextId = ntax;
-    for (auto p = tree.leftmost_leaf(); !p.null(); p = p.next_post())
-        if (!p.leaf() && !p.root())
-            p->id = -nextId++;
-}
-
-
-struct MCMCResults {
-    vector<double> logPosterior;  // log-posterior at each accepted/proposed state
-    vector<double> iterTime;      // wall-clock seconds consumed by each iteration
-    // DEBUG fields — comment out before production
-    vector<int>    branch;        // index of branch proposed at each iteration
-    vector<double> old_length;    // branch length before proposal
-    vector<double> new_length;    // branch length after proposal
-    vector<bool>   accepted;      // whether the proposal was accepted
-    double         initialLogPost  = 0.0;
-    int            numBranches    = 0;
-    int            numAccepted    = 0;
-    int            numNegative    = 0;   // proposals rejected because newLen <= 0
-};
-
-
-// Shared implementation for both decomposition-tree MCMC variants.
-// useLvD=false → pruning layout; useLvD=true → LvD (greedy) layout.
-static MCMCResults runDecomMCMC(
-        phylo<DecomNodeDataAllSites>& t,
-        const SubstModel&                model,
-        const vector<pair<Pattern,int>>& patterns,
-        const SimulationOptions&         options)
-{
-
-    Stopwatch sw;
-    vector<double> patternL;
-    Scalar logLik = computeLikelihood(t, model, patterns, patternL, sw);
-
-    Scalar logPrior = 0.0;
-    for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
-        if (p.leaf())
-            logPrior += log(options.prior_branch_rate) - options.prior_branch_rate * p->length;
-    Scalar logPost = logLik + logPrior;
-
-    unsigned int numBranches = 0;
-    for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
-        if (p.leaf()) numBranches++;
-    vector<phylo<DecomNodeDataAllSites>::iterator> branches(numBranches);
-    for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
-        if (p.leaf())
-            branches[abs(p->id)] = p;
-
-    MCMCResults results;
-    results.logPosterior.reserve(options.num_iterations);
-    results.iterTime.reserve(options.num_iterations);
-    results.branch.reserve(options.num_iterations);
-    results.old_length.reserve(options.num_iterations);
-    results.new_length.reserve(options.num_iterations);
-    results.accepted.reserve(options.num_iterations);
-    results.initialLogPost = logPost;
-    results.numBranches    = numBranches;
-
-    for (int iter = 0; iter < options.num_iterations; ++iter) {
-        unsigned int    branchIdx = random_num(numBranches);
-        auto   p         = branches[branchIdx];
-        double oldLen    = p->length;
-        double newLen    = oldLen + randu(-options.proposal_width, options.proposal_width);
-
-        bool accept = false;
-        double likeTime = 0.0;
-        if (newLen > 0.0) {
-            auto t0 = chrono::steady_clock::now();
-            Scalar newLogLik   = updateBranchLength(t, model, patterns, patternL, p, newLen);
-            likeTime += chrono::duration<double>(chrono::steady_clock::now() - t0).count();
-
-            Scalar newLogPrior = logPrior + options.prior_branch_rate * (oldLen - newLen);
-            Scalar newLogPost  = newLogLik + newLogPrior;
-
-            accept = (log(randu()) < newLogPost - logPost);
-
-            if (accept) {
-                logLik   = newLogLik;
-                logPrior = newLogPrior;
-                logPost  = newLogPost;
-            } else {
-                auto t1 = chrono::steady_clock::now();
-                updateBranchLength(t, model, patterns, patternL, p, oldLen);  // restore
-                likeTime += chrono::duration<double>(chrono::steady_clock::now() - t1).count();
-            }
-        } else {
-            results.numNegative++;
-        }
-
-        if (accept) results.numAccepted++;
-
-        results.logPosterior.push_back(logPost);
-        results.iterTime.push_back(likeTime);
-        results.branch.push_back(branchIdx);
-        results.old_length.push_back(oldLen);
-        results.new_length.push_back(newLen);
-        results.accepted.push_back(accept);
-    }
-
-    return results;
-}
 
 
 
@@ -531,7 +423,7 @@ int main(int argc, char* argv[])
                 copy(decomTree, pruningT);
 
                 seed_random(42);
-                MCMCResults pruningResults = runDecomMCMC(pruningT, model, patterns, options);
+                MCMCResults pruningResults = runDecomMCMC(pruningT, model, patterns, options.prior_branch_rate, options.proposal_width, options.num_iterations);
                 pruningTime = accumulate(pruningResults.iterTime.begin(), pruningResults.iterTime.end(), 0.0);
                 decomTree.clear();
                 pruningT.clear();
@@ -551,7 +443,7 @@ int main(int argc, char* argv[])
                 copy(decomTree, lvdT);
 
                 seed_random(42);
-                MCMCResults decomResults = runDecomMCMC(lvdT, model, patterns, options);
+                MCMCResults decomResults = runDecomMCMC(lvdT, model, patterns, options.prior_branch_rate, options.proposal_width, options.num_iterations);
                 decomTime = accumulate(decomResults.iterTime.begin(), decomResults.iterTime.end(), 0.0);
                 decomTree.clear();
                 lvdT.clear();

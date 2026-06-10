@@ -589,7 +589,7 @@ void constructPruningDecomp( phylo<basic_newick>& input, phylo<DecomNodeData>& d
     rootNode->mergeType = 1; //Merge of two clades.
     rootNode->isClade = true;
     
-    cerr<<"Constructed pruning decom tree"<<endl;
+    //cerr<<"Constructed pruning decom tree"<<endl;
 }
       
 
