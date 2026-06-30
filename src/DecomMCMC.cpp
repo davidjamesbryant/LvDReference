@@ -61,32 +61,35 @@ MCMCResults runDecomMCMC(
         unsigned int branchIdx = random_num(numBranches);
         auto   p         = branches[branchIdx];
         double oldLen    = p->length;
-        double newLen    = oldLen + randu(-proposal_width, proposal_width);
+
+        //OLD_WAY
+        //        double newLen    = oldLen + randu(-proposal_width, proposal_width);
+        //NEW WAY
+        double newLen = randu(std::max(0.0, oldLen - proposal_width),oldLen+proposal_width);
 
         bool accept = false;
         double likeTime = 0.0;
-        if (newLen > 0.0) {
-            auto t0 = chrono::steady_clock::now();
-            Scalar newLogLik   = updateBranchLength(t, model, patterns, patternL, p, newLen);
-            likeTime += chrono::duration<double>(chrono::steady_clock::now() - t0).count();
 
-            Scalar newLogPrior = logPrior + prior_branch_rate * (oldLen - newLen);
-            Scalar newLogPost  = newLogLik + newLogPrior;
+        auto t0 = chrono::steady_clock::now();
+        Scalar newLogLik   = updateBranchLength(t, model, patterns, patternL, p, newLen);
+        likeTime += chrono::duration<double>(chrono::steady_clock::now() - t0).count();
 
-            accept = (log(randu()) < newLogPost - logPost);
+        Scalar newLogPrior = logPrior + prior_branch_rate * (oldLen - newLen);
+        Scalar newLogPost  = newLogLik + newLogPrior;
+        Scalar logHastings = log(1.0/(newLen+proposal_width- max(newLen-proposal_width,0.0)));
+        logHastings -= log(1.0/(oldLen+proposal_width- max(oldLen-proposal_width,0.0)));
+        accept = (log(randu()) < newLogPost - logPost + logHastings);
 
-            if (accept) {
-                logLik   = newLogLik;
-                logPrior = newLogPrior;
-                logPost  = newLogPost;
-            } else {
-                auto t1 = chrono::steady_clock::now();
-                updateBranchLength(t, model, patterns, patternL, p, oldLen);  // restore
-                likeTime += chrono::duration<double>(chrono::steady_clock::now() - t1).count();
-            }
+        if (accept) {
+            logLik   = newLogLik;
+            logPrior = newLogPrior;
+            logPost  = newLogPost;
         } else {
-            results.numNegative++;
+            auto t1 = chrono::steady_clock::now();
+            updateBranchLength(t, model, patterns, patternL, p, oldLen);  // restore
+            //likeTime += chrono::duration<double>(chrono::steady_clock::now() - t1).count();
         }
+
 
         if (accept) results.numAccepted++;
 
