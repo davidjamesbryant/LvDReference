@@ -200,15 +200,27 @@ static MCMCResults runStandardMCMC(
             logPrior += log(options.prior_branch_rate) - options.prior_branch_rate * p->length;
     Scalar logPost = logLik + logPrior;
 
-    // Collect one iterator per branch indexed by abs(p->id), so that branch k
-    // refers to the same edge across all MCMC methods.
-    int numBranches = 0;
+
+    int max_id = 0;
     for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
-        if (!p.root()) numBranches++;
-    vector<phylo<NodeDataAllSites>::iterator> branches(numBranches);
+        if (!p.root())
+            max_id = std::max(max_id, p->id);
+    vector<phylo<NodeDataAllSites>::iterator> branches(max_id+1);
+
     for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
         if (!p.root())
             branches[abs(p->id)] = p;
+
+    //Remove null pointers - this can happen if not all taxa appear in the tree
+    int numBranches=0;
+    for (int i=0;i<=max_id; i++)
+    {
+        if (!branches[i].null())
+            branches[numBranches++] = branches[i];
+    }
+    branches.resize(numBranches);
+
+
 
     MCMCResults results;
     results.logPosterior.reserve(options.num_iterations);

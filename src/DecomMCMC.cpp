@@ -39,13 +39,22 @@ MCMCResults runDecomMCMC(
             logPrior += log(prior_branch_rate) - prior_branch_rate * p->length;
     Scalar logPost = logLik + logPrior;
 
-    unsigned int numBranches = 0;
+    int max_id = 0;
     for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
-        if (p.leaf()) numBranches++;
-    vector<phylo<DecomNodeDataAllSites>::iterator> branches(numBranches);
+        if (p.leaf()) max_id = std::max(max_id,p->id);
+    vector<phylo<DecomNodeDataAllSites>::iterator> branches(max_id+1);
     for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
         if (p.leaf())
             branches[abs(p->id)] = p;
+
+    //Eliminate null entries. This can occur if there the tree is missing taxa.
+    unsigned int numBranches = 0;
+    for (int i=0;i<=max_id;i++)
+        if (!branches[i].null())
+            branches[numBranches++] = branches[i];
+    branches.resize(numBranches);
+
+
 
     MCMCResults results;
     results.logPosterior.reserve(num_iterations);
