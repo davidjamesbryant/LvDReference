@@ -216,7 +216,10 @@ static MCMCResults runStandardMCMC(
     for (int i=0;i<=max_id; i++)
     {
         if (!branches[i].null())
-            branches[numBranches++] = branches[i];
+        {
+            branches[numBranches] = branches[i];
+            numBranches++;
+        }
     }
     branches.resize(numBranches);
 
@@ -347,6 +350,8 @@ int main(int argc, char* argv[])
                 << "av_height LvD tree\t"
                 << "LvD time\t";
         }
+        if (options.run_pruning && options.run_lvd)
+            cout<<"ratio";
         cout << endl;
     }
 
@@ -436,16 +441,21 @@ int main(int argc, char* argv[])
     <<taxa_names.size()<<"\t";
     if (options.run_standard)
          cout<<accumulate(standardResults.iterTime.begin(),standardResults.iterTime.end(), 0.0) <<"\t";
+    double pruning_time, lvd_time;
     if (options.run_pruning)
         {
             cout << pruning_height<<"\t"<<pruning_avheight<<"\t";
-            cout<< accumulate(pruningResults.iterTime.begin(),pruningResults.iterTime.end(), 0.0) <<"\t";
+            pruning_time = accumulate(pruningResults.iterTime.begin(),pruningResults.iterTime.end(), 0.0);
+            cout<< pruning_time <<"\t";
         }
     if (options.run_lvd)
         {
             cout << lvd_height<<"\t"<<lvd_avheight<<"\t";
-            cout<< accumulate(lvdResults.iterTime.begin(),lvdResults.iterTime.end(), 0.0) <<"\t";
+            lvd_time = accumulate(lvdResults.iterTime.begin(),lvdResults.iterTime.end(), 0.0);
+            cout<< lvd_time <<"\t";
         }
+    if (options.run_pruning && options.run_lvd)
+        cout<< pruning_time / lvd_time;
     cout << endl;
 
     return 0;

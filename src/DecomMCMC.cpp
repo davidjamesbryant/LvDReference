@@ -41,7 +41,7 @@ MCMCResults runDecomMCMC(
 
     int max_id = 0;
     for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
-        if (p.leaf()) max_id = std::max(max_id,p->id);
+        if (p.leaf()) max_id = std::max(max_id,abs(p->id));
     vector<phylo<DecomNodeDataAllSites>::iterator> branches(max_id+1);
     for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
         if (p.leaf())
