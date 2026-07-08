@@ -441,7 +441,7 @@ int main(int argc, char* argv[])
     <<taxa_names.size()<<"\t";
     if (options.run_standard)
          cout<<accumulate(standardResults.iterTime.begin(),standardResults.iterTime.end(), 0.0) <<"\t";
-    double pruning_time, lvd_time;
+    double pruning_time = 0.0, lvd_time = 0.0;
     if (options.run_pruning)
         {
             cout << pruning_height<<"\t"<<pruning_avheight<<"\t";
