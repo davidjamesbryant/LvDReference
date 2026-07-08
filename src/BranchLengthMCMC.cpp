@@ -204,7 +204,7 @@ static MCMCResults runStandardMCMC(
     int max_id = 0;
     for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
         if (!p.root())
-            max_id = std::max(max_id, p->id);
+            max_id = std::max(max_id, abs(p->id));
     vector<phylo<NodeDataAllSites>::iterator> branches(max_id+1);
 
     for (auto p = t.leftmost_leaf(); !p.null(); p = p.next_post())
