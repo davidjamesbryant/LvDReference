@@ -350,8 +350,8 @@ int main(int argc, char* argv[])
                 << "av_height LvD tree\t"
                 << "LvD time\t";
         }
-        if (options.run_pruning && options.run_lvd)
-            cout<<"ratio";
+       // if (options.run_pruning && options.run_lvd)
+       //     cout<<"ratio";
         cout << endl;
     }
 
@@ -454,8 +454,8 @@ int main(int argc, char* argv[])
             lvd_time = accumulate(lvdResults.iterTime.begin(),lvdResults.iterTime.end(), 0.0);
             cout<< lvd_time <<"\t";
         }
-    if (options.run_pruning && options.run_lvd)
-        cout<< pruning_time / lvd_time;
+  //  if (false && options.run_pruning && options.run_lvd)
+  //      cout<< pruning_time / lvd_time;
     cout << endl;
 
     return 0;
