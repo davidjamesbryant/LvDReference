@@ -422,8 +422,10 @@ int main(int argc, char* argv[])
                 phylo<DecomNodeDataAllSites> pruningT;
                 copy(decomTree, pruningT);
 
-                seed_random(42);
+
+                seed_random(42);  //Set the seed so that we can repeat thee run identically with the different likelihood routine
                 MCMCResults pruningResults = runDecomMCMC(pruningT, model, patterns, options.prior_branch_rate, options.proposal_width, options.num_iterations);
+                seed_random();  //Restore randomness
                 pruningTime = accumulate(pruningResults.iterTime.begin(), pruningResults.iterTime.end(), 0.0);
                 decomTree.clear();
                 pruningT.clear();
@@ -444,6 +446,7 @@ int main(int argc, char* argv[])
 
                 seed_random(42);
                 MCMCResults decomResults = runDecomMCMC(lvdT, model, patterns, options.prior_branch_rate, options.proposal_width, options.num_iterations);
+                seed_random();
                 decomTime = accumulate(decomResults.iterTime.begin(), decomResults.iterTime.end(), 0.0);
                 decomTree.clear();
                 lvdT.clear();
