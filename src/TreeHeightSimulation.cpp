@@ -177,6 +177,16 @@ bool parseArguments(int argc, char* argv[], SimulationOptions& options, string& 
         errmsg = "ERROR: -R <replicates> is required\n\n" + Usage();
         return false;
     }
+    if (options.min_ntax < 1)
+    {
+        errmsg = "ERROR: -m <min_ntax> must be at least 1\n\n" + Usage();
+        return false;
+    }
+    if (options.min_ntax > options.max_ntax)
+    {
+        errmsg = "ERROR: -m <min_ntax> must not exceed -n <max_ntax>\n\n" + Usage();
+        return false;
+    }
 
     return true;
 }
