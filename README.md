@@ -21,3 +21,22 @@ For reproducibility of the results in the initial paper, please check out the `f
 ```
 git checkout firstSubmissionExperiments
 ```
+
+## Building
+
+Requires CMake >= 3.20 and a C++17 compiler.
+
+```
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+```
+
+This builds all executables (`RunSimulation`, `TreeHeightSimulation`, `TreeHeights`, `LvDLikelihoods`, `TidyTree`, `BranchLengthMCMC`) into `build/`.
+
+To build a single target:
+
+```
+cmake --build build --target TreeHeightSimulation -j
+```
+
+To use the reference (unoptimized, easier-to-validate) tensor calculations, add `-DUSE_REFERENCE_TENSOR=ON` to the first `cmake` command.
