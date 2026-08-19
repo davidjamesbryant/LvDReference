@@ -5,7 +5,6 @@ build/
 cmake-build-*/
 LvDLikelihoods
 RunSimulation
-TidyTree
 TreeHeights
 
 # Xcode projects and user settings

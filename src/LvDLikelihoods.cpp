@@ -50,17 +50,12 @@ static bool handleInput(int argc, char* argv[], bool& printHeader, string& seqFi
         return true;
     }
     if (argc==3) {
-        printHeader = true;
+        printHeader = false;
         seqFilename = string(argv[1]);
         treeFilename = string(argv[2]);
         return true;
     }
     return false;
-    
-    if (argc <= 1) {
-        // No filenames provided; still considered "parsed OK".
-        return true;
-    }
 }
 
 

@@ -276,7 +276,7 @@ int main(int argc, char* argv[])
                 << pruningHeight << "\t"
                 << pruning_avheight << "\t"
                 << decomHeight << "\t"
-                << decom_avheight << "\t";
+                << decom_avheight;
             cout << endl;
 
             simT.clear();
