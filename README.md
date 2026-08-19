@@ -6,6 +6,8 @@ https://arxiv.org/abs/2601.19064 and in subsequent versions
 
 This implementation is used to illustrate the algorithm and to make the simulation benchmarks in the paper.
 
+Version d7e1c47 of the code corresponds to the second resubmission of the paper.
+
 
 
 ## Repository Structure
