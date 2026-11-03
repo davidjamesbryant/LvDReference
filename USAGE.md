@@ -1,6 +1,6 @@
 # Usage
 
-Command-line usage for the five executables built by this project (see
+Command-line usage for the six executables built by this project (see
 `README.md` for build instructions). This reflects what each program's
 argument parser actually accepts, not just the text of its `-h`/usage
 message — a few programs have parsers that are stricter (or looser) than
@@ -182,4 +182,36 @@ Example:
 
 ```
 BranchLengthMCMC -SPLh -p 20 -u 0.01 -i 5000 alignment.phy tree.nwk
+```
+
+---
+
+## LikelihoodAgreement
+
+```
+LikelihoodAgreement [-h] -r <height> -R <replicates> [-m <min_ntax>] [-n <max_ntax>] [-s <nsites>]
+```
+
+Checks numerical agreement between the two decomposition trees. Each replicate
+simulates a uniform tree and a Jukes-Cantor alignment, then computes the
+log-likelihood of the true tree using the pruning decomposition tree and the
+LvD decomposition tree. The number of taxa is sampled per replicate so that
+`log(ntax)` is uniform between `min_ntax` and `max_ntax`.
+
+Log-likelihoods and their absolute difference are printed at full precision
+(17 significant digits). `-h`, if present, must be the first argument and
+enables a header row. The remaining arguments are `key value` pairs:
+
+| Option | Value | Required | Default |
+|--------|-------|----------|---------|
+| `-r <height>` | double > 0, expected root-to-tip mutations | yes | — |
+| `-R <replicates>` | integer > 0, number of replicates | yes | — |
+| `-m <min_ntax>` | integer ≥ 3 | no | 100 |
+| `-n <max_ntax>` | integer, must be ≥ `min_ntax` | no | 10000 |
+| `-s <nsites>` | integer > 0, number of sites | no | 1000 |
+
+Example:
+
+```
+LikelihoodAgreement -h -r 0.05 -R 100
 ```

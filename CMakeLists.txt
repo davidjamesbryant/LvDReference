@@ -46,7 +46,7 @@ target_compile_options(lvd_core PUBLIC
 # ------------------------------------------------------------
 # Executables
 # ------------------------------------------------------------
-foreach(TARGET RunSimulation TreeHeightSimulation TreeHeights LvDLikelihoods BranchLengthMCMC)
+foreach(TARGET RunSimulation TreeHeightSimulation TreeHeights LvDLikelihoods BranchLengthMCMC LikelihoodAgreement)
     add_executable(${TARGET} src/${TARGET}.cpp)
     target_link_libraries(${TARGET} PRIVATE lvd_core)
 endforeach()
