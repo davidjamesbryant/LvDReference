@@ -24,7 +24,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-This builds all executables (`RunSimulation`, `TreeHeightSimulation`, `TreeHeights`, `LvDLikelihoods`, `BranchLengthMCMC`) into `build/`.
+This builds all executables (`RunSimulation`, `TreeHeightSimulation`, `TreeHeights`, `LvDLikelihoods`, `BranchLengthMCMC`, `LikelihoodAgreement`) into `build/`.
 
 To build a single target:
 
